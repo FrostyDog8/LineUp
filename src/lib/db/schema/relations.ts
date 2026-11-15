@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import { activities, registrationPolicies } from "./activities";
 import { memberships } from "./memberships";
+import { occurrences } from "./occurrences";
 import { managerPermissions } from "./permissions";
 import { ranks } from "./ranks";
 import { sessions, users } from "./users";
@@ -25,7 +26,15 @@ export const activitiesRelations = relations(activities, ({ one, many }) => ({
   }),
   ranks: many(ranks),
   memberships: many(memberships),
+  occurrences: many(occurrences),
   policy: one(registrationPolicies),
+}));
+
+export const occurrencesRelations = relations(occurrences, ({ one }) => ({
+  activity: one(activities, {
+    fields: [occurrences.activityId],
+    references: [activities.id],
+  }),
 }));
 
 export const ranksRelations = relations(ranks, ({ one, many }) => ({

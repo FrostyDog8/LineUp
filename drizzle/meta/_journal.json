@@ -8,6 +8,13 @@
       "when": 1794766536223,
       "tag": "0000_init_lineup_domain",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794776179951,
+      "tag": "0001_activity_tz_jerusalem_default",
+      "breakpoints": true
     }
   ]
 }

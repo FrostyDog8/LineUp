@@ -1,0 +1,1 @@
+ALTER TABLE "activities" ALTER COLUMN "timezone" SET DEFAULT 'Asia/Jerusalem';

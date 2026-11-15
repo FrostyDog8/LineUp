@@ -10,6 +10,7 @@ import {
 import { ActionForm } from "@/components/action-form";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { SegmentedToggle } from "@/components/segmented-toggle";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -80,23 +81,6 @@ export default async function ActivitySettingsPage({ params }: Props) {
                 <Input id="name" name="name" defaultValue={activity.name} required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="typeText">Type</Label>
-                <Input
-                  id="typeText"
-                  name="typeText"
-                  defaultValue={activity.typeText}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Timezone</Label>
-                <Input
-                  id="timezone"
-                  name="timezone"
-                  defaultValue={activity.timezone}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="defaultCapacity">Default capacity</Label>
                 <Input
                   id="defaultCapacity"
@@ -108,16 +92,16 @@ export default async function ActivitySettingsPage({ params }: Props) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="joinMode">Join mode</Label>
-                <select
-                  id="joinMode"
+                <Label>Join mode</Label>
+                <SegmentedToggle
                   name="joinMode"
+                  ariaLabel="Join mode"
                   defaultValue={activity.joinMode}
-                  className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
-                >
-                  <option value="must_approve">Must approve</option>
-                  <option value="open">Open</option>
-                </select>
+                  options={[
+                    { value: "open", label: "Open" },
+                    { value: "must_approve", label: "Approval required" },
+                  ]}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="defaultRankId">Default rank</Label>
@@ -134,6 +118,14 @@ export default async function ActivitySettingsPage({ params }: Props) {
                   ))}
                 </select>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Schedule:{" "}
+                {activity.scheduleMode === "one_time"
+                  ? "one-time"
+                  : "recurring"}
+                . Timezone {activity.timezone} (server default; not editable
+                here yet).
+              </p>
               <FormSubmitButton>Save settings</FormSubmitButton>
             </ActionForm>
           </CardContent>

@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { parseInviteInput } from "@/lib/invite";
+import { parseDateTimeLocal } from "@/lib/datetime";
 import {
   createActivity,
+  getActivityById,
   transferOwnership,
   updateActivitySettings,
 } from "@/server/activities";
@@ -18,12 +20,18 @@ import {
   updateManagerToggles,
 } from "@/server/memberships";
 import {
+  createOccurrence,
+  updateOccurrence,
+} from "@/server/occurrences";
+import {
   createRank,
   deleteRank,
   setDefaultRank,
   updateRank,
 } from "@/server/ranks";
 import type { ManagerToggles } from "@/server/permissions";
+
+const DEFAULT_TIMEZONE = "Asia/Jerusalem";
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string };
 
@@ -50,22 +58,31 @@ export async function createActivityAction(
 ): Promise<ActionResult> {
   const user = await requireSessionUser();
   const name = String(formData.get("name") ?? "");
-  const typeText = String(formData.get("typeText") ?? "");
-  const timezone = String(formData.get("timezone") ?? "UTC");
   const joinModeRaw = String(formData.get("joinMode") ?? "must_approve");
   const joinMode =
     joinModeRaw === "open" ? "open" : ("must_approve" as const);
+  const scheduleRaw = String(formData.get("scheduleMode") ?? "one_time");
+  const scheduleMode =
+    scheduleRaw === "recurring_simple"
+      ? ("recurring_simple" as const)
+      : ("one_time" as const);
   const defaultCapacity = Number(formData.get("defaultCapacity") ?? 18);
-  const defaultRankName = String(formData.get("defaultRankName") ?? "Regular");
+  const startsAtRaw = String(formData.get("startsAt") ?? "");
 
   try {
+    const startsAt =
+      scheduleMode === "one_time"
+        ? parseDateTimeLocal(startsAtRaw, DEFAULT_TIMEZONE)
+        : undefined;
+
     const activity = await createActivity(user.id, {
       name,
-      typeText,
-      timezone,
       joinMode,
+      scheduleMode,
+      startsAt,
       defaultCapacity: Number.isFinite(defaultCapacity) ? defaultCapacity : 18,
-      defaultRankName,
+      timezone: DEFAULT_TIMEZONE,
+      defaultRankName: "member",
     });
     revalidatePath("/dashboard");
     redirect(`/activities/${activity.id}`);
@@ -122,8 +139,6 @@ export async function updateSettingsAction(
   const defaultCapacity = Number(formData.get("defaultCapacity"));
   const defaultRankId = String(formData.get("defaultRankId") ?? "") || null;
   const name = String(formData.get("name") ?? "");
-  const typeText = String(formData.get("typeText") ?? "");
-  const timezone = String(formData.get("timezone") ?? "");
 
   try {
     await updateActivitySettings(activityId, user.id, {
@@ -133,8 +148,6 @@ export async function updateSettingsAction(
         : undefined,
       defaultRankId,
       name: name || undefined,
-      typeText,
-      timezone: timezone || undefined,
     });
     if (defaultRankId) {
       await setDefaultRank(activityId, user.id, defaultRankId);
@@ -146,6 +159,81 @@ export async function updateSettingsAction(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Could not save settings",
+    };
+  }
+}
+
+export async function createOccurrenceAction(
+  activityId: string,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const user = await requireSessionUser();
+  const activity = await getActivityById(activityId);
+  if (!activity) return { ok: false, error: "Activity not found" };
+
+  const startsAtRaw = String(formData.get("startsAt") ?? "");
+  const capacityRaw = String(formData.get("capacity") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "");
+
+  try {
+    const startsAt = parseDateTimeLocal(startsAtRaw, activity.timezone);
+    const capacity =
+      capacityRaw === ""
+        ? null
+        : Number.isFinite(Number(capacityRaw))
+          ? Number(capacityRaw)
+          : null;
+
+    await createOccurrence(activityId, user.id, {
+      startsAt,
+      capacity,
+      notes: notes || null,
+    });
+    revalidatePath(`/activities/${activityId}`);
+    return { ok: true, message: "Event added." };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not add event",
+    };
+  }
+}
+
+export async function updateOccurrenceAction(
+  activityId: string,
+  occurrenceId: string,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const user = await requireSessionUser();
+  const activity = await getActivityById(activityId);
+  if (!activity) return { ok: false, error: "Activity not found" };
+
+  const startsAtRaw = String(formData.get("startsAt") ?? "");
+  const capacityRaw = String(formData.get("capacity") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "");
+
+  try {
+    const startsAt = parseDateTimeLocal(startsAtRaw, activity.timezone);
+    const capacity =
+      capacityRaw === ""
+        ? null
+        : Number.isFinite(Number(capacityRaw))
+          ? Number(capacityRaw)
+          : null;
+
+    await updateOccurrence(activityId, user.id, occurrenceId, {
+      startsAt,
+      capacity,
+      notes: notes || null,
+    });
+    revalidatePath(`/activities/${activityId}`);
+    return { ok: true, message: "Event updated." };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not update event",
     };
   }
 }

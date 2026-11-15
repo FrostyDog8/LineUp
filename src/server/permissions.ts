@@ -24,6 +24,8 @@ export type ActivityAccess = {
   canChangeRanks: boolean;
   canManageSettings: boolean;
   canPromoteManagers: boolean;
+  /** Owner always; managers until a dedicated edit-events toggle ships. */
+  canEditEvents: boolean;
   permissions: ManagerToggles | null;
 };
 
@@ -85,6 +87,8 @@ export async function getActivityAccess(
     canChangeRanks: isActive && (isOwner || Boolean(perms?.changeRanks)),
     canManageSettings: isActive && isOwner,
     canPromoteManagers: isActive && isOwner,
+    canEditEvents:
+      isActive && (isOwner || row.role === "manager"),
     permissions: perms,
   };
 }

@@ -5,6 +5,7 @@ import {
   MembersPanel,
 } from "@/components/member-actions";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { EventsPanel } from "@/components/events-panel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,6 +17,7 @@ import {
 import { getSessionUser } from "@/lib/auth";
 import { getActivityById } from "@/server/activities";
 import { listMembers } from "@/server/memberships";
+import { listOccurrences } from "@/server/occurrences";
 import { getActivityAccess } from "@/server/permissions";
 import { listRanks } from "@/server/ranks";
 
@@ -36,9 +38,10 @@ export default async function ActivityPage({ params }: Props) {
     redirect("/dashboard");
   }
 
-  const [members, ranks] = await Promise.all([
+  const [members, ranks, events] = await Promise.all([
     listMembers(id),
     listRanks(id),
+    listOccurrences(id),
   ]);
   const requests = members.filter((m) => m.status === "requested");
   const appUrl =
@@ -46,11 +49,15 @@ export default async function ActivityPage({ params }: Props) {
     process.env.BETTER_AUTH_URL ??
     "http://localhost:3000";
   const inviteUrl = `${appUrl.replace(/\/$/, "")}/activities/join?code=${activity.inviteSlug}`;
+  const scheduleLabel =
+    activity.scheduleMode === "one_time" ? "one-time" : "recurring";
+  const joinLabel =
+    activity.joinMode === "open" ? "open join" : "approval required";
 
   return (
     <DashboardShell
       title={activity.name}
-      subtitle={`${activity.typeText || "Activity"} · ${activity.joinMode === "open" ? "open join" : "must approve"} · ${activity.timezone}`}
+      subtitle={`${scheduleLabel} · ${joinLabel}`}
       userLabel={user.displayName || user.phone}
       askForName={!user.displayName?.trim()}
     >
@@ -116,6 +123,35 @@ export default async function ActivityPage({ params }: Props) {
           </Card>
         ) : null}
       </div>
+
+      {access.status === "active" ? (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Events</CardTitle>
+            <CardDescription>
+              {activity.scheduleMode === "recurring_simple"
+                ? "Occurrences for this recurring activity. Capacity can override the activity default."
+                : "Single occurrence for this one-time activity."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <EventsPanel
+              activityId={id}
+              timezone={activity.timezone}
+              defaultCapacity={activity.defaultCapacity}
+              scheduleMode={activity.scheduleMode}
+              canEdit={access.canEditEvents}
+              events={events.map((e) => ({
+                id: e.id,
+                startsAt: e.startsAt.toISOString(),
+                capacity: e.capacity,
+                status: e.status,
+                notes: e.notes,
+              }))}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {access.status === "active" ? (
         <Card className="mt-6">
