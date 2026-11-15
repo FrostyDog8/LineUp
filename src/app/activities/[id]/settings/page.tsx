@@ -1,16 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import {
-  createRankAction,
-  deleteRankAction,
-  transferOwnershipAction,
-  updateRankAction,
-  updateSettingsAction,
-} from "@/app/actions/activities";
+import { updateSettingsAction } from "@/app/actions/activities";
 import { ActionForm } from "@/components/action-form";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { RanksSettings } from "@/components/ranks-settings";
+import { RegistrationOpenControls } from "@/components/registration-open-controls";
 import { SegmentedToggle } from "@/components/segmented-toggle";
+import { TransferOwnershipDialog } from "@/components/transfer-ownership-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -48,12 +45,10 @@ export default async function ActivitySettingsPage({ params }: Props) {
     listMembers(id),
     listRanks(id),
   ]);
-  const activeMembers = members.filter(
+  const transferCandidates = members.filter(
     (m) => m.status === "active" && m.userId !== user.id,
   );
   const boundUpdate = updateSettingsAction.bind(null, id);
-  const boundTransfer = transferOwnershipAction.bind(null, id);
-  const boundCreateRank = createRankAction.bind(null, id);
 
   const scheduleSummary =
     activity.scheduleMode === "weekly"
@@ -61,6 +56,13 @@ export default async function ActivitySettingsPage({ params }: Props) {
       : activity.scheduleMode === "one_time"
         ? "One-time"
         : "Custom";
+
+  const regAtLocal = activity.scheduleDefaults.registrationOpensAt
+    ? formatDateTimeLocal(
+        new Date(activity.scheduleDefaults.registrationOpensAt),
+        activity.timezone,
+      )
+    : "";
 
   return (
     <DashboardShell
@@ -148,59 +150,25 @@ export default async function ActivitySettingsPage({ params }: Props) {
                       required
                     />
                   </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <Label>Registration opens</Label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <select
-                        id="registrationOpensWeekday"
-                        name="registrationOpensWeekday"
-                        defaultValue={
-                          activity.scheduleDefaults.registrationOpensWeekday ??
-                          1
-                        }
-                        className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
-                        required
-                      >
-                        {WEEKDAY_OPTIONS.map((d) => (
-                          <option key={d.value} value={d.value}>
-                            {d.label}
-                          </option>
-                        ))}
-                      </select>
-                      <Input
-                        id="registrationOpensTime"
-                        name="registrationOpensTime"
-                        type="time"
-                        defaultValue={
-                          activity.scheduleDefaults.registrationOpensTime ??
-                          "12:00"
-                        }
-                        required
-                      />
-                    </div>
-                  </div>
                 </div>
-              ) : (
-                <div className="space-y-1">
-                  <Label htmlFor="registrationOpensAt">Registration opens</Label>
-                  <Input
-                    id="registrationOpensAt"
-                    name="registrationOpensAt"
-                    type="datetime-local"
-                    defaultValue={
-                      activity.scheduleDefaults.registrationOpensAt
-                        ? formatDateTimeLocal(
-                            new Date(
-                              activity.scheduleDefaults.registrationOpensAt,
-                            ),
-                            activity.timezone,
-                          )
-                        : ""
-                    }
-                    required
-                  />
-                </div>
-              )}
+              ) : null}
+
+              <RegistrationOpenControls
+                activityId={id}
+                scheduleMode={activity.scheduleMode}
+                registrationOpensMode={
+                  activity.scheduleDefaults.registrationOpensMode ??
+                  "scheduled"
+                }
+                registrationOpensAtLocal={regAtLocal}
+                registrationOpensWeekday={
+                  activity.scheduleDefaults.registrationOpensWeekday ?? 1
+                }
+                registrationOpensTime={
+                  activity.scheduleDefaults.registrationOpensTime ?? "12:00"
+                }
+                canOpenNow={access.canEditEvents}
+              />
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
@@ -242,154 +210,33 @@ export default async function ActivitySettingsPage({ params }: Props) {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">Ranks</CardTitle>
-              <CardDescription>Create, rename, reorder, delete.</CardDescription>
+              <CardDescription>
+                Rename ranks and choose when each merges into the main list.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <ul className="space-y-2">
-                {ranks.map((rank) => (
-                  <li
-                    key={rank.id}
-                    className="rounded-lg border border-border px-2.5 py-2"
-                  >
-                    <form
-                      action={updateRankAction.bind(null, id, rank.id)}
-                      className="flex flex-wrap items-end gap-2"
-                    >
-                      <div className="min-w-[8rem] flex-1 space-y-1">
-                        <Label htmlFor={`rank-name-${rank.id}`}>Name</Label>
-                        <Input
-                          id={`rank-name-${rank.id}`}
-                          name="name"
-                          defaultValue={rank.name}
-                          required
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor={`rank-pri-${rank.id}`}>Priority</Label>
-                        <Input
-                          id={`rank-pri-${rank.id}`}
-                          name="sortPriority"
-                          type="number"
-                          defaultValue={rank.sortPriority}
-                          className="w-20"
-                        />
-                      </div>
-                      <FormSubmitButton
-                        size="sm"
-                        variant="outline"
-                        pendingLabel="…"
-                      >
-                        Save
-                      </FormSubmitButton>
-                    </form>
-                    {ranks.length <= 1 ? (
-                      <p className="mt-1.5 text-xs text-muted-foreground">
-                        Cannot delete the only remaining rank.
-                      </p>
-                    ) : (
-                      <ActionForm
-                        action={deleteRankAction.bind(null, id, rank.id)}
-                        className="mt-1"
-                      >
-                        <FormSubmitButton
-                          size="sm"
-                          variant="ghost"
-                          pendingLabel="…"
-                        >
-                          Delete{rank.isDefault ? " (default)" : ""}
-                        </FormSubmitButton>
-                      </ActionForm>
-                    )}
-                  </li>
-                ))}
-              </ul>
-
-              <ActionForm
-                action={boundCreateRank}
-                className="flex flex-wrap items-end gap-2 border-t border-border pt-3"
-              >
-                <div className="min-w-[8rem] flex-1 space-y-1">
-                  <Label htmlFor="new-rank-name">New rank</Label>
-                  <Input
-                    id="new-rank-name"
-                    name="name"
-                    placeholder="Substitute"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="new-rank-pri">Priority</Label>
-                  <Input
-                    id="new-rank-pri"
-                    name="sortPriority"
-                    type="number"
-                    defaultValue={100}
-                    className="w-20"
-                  />
-                </div>
-                <FormSubmitButton size="sm" pendingLabel="…">
-                  Add
-                </FormSubmitButton>
-              </ActionForm>
+            <CardContent>
+              <RanksSettings
+                activityId={id}
+                timezone={activity.timezone}
+                ranks={ranks}
+              />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Transfer ownership</CardTitle>
+              <CardTitle className="text-lg">Ownership</CardTitle>
               <CardDescription>
-                Pick a new owner; choose your rank afterward.
+                Transfer this activity to another member.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {activeMembers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Invite and approve another member before transferring.
-                </p>
-              ) : (
-                <ActionForm action={boundTransfer} className="space-y-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="newOwnerUserId">New owner</Label>
-                    <select
-                      id="newOwnerUserId"
-                      name="newOwnerUserId"
-                      required
-                      className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
-                      defaultValue=""
-                    >
-                      <option value="" disabled>
-                        Select member
-                      </option>
-                      {activeMembers.map((m) => (
-                        <option key={m.userId} value={m.userId}>
-                          {m.displayName || m.phone} ({m.role})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="outgoingOwnerRankId">Your new rank</Label>
-                    <select
-                      id="outgoingOwnerRankId"
-                      name="outgoingOwnerRankId"
-                      required
-                      className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
-                      defaultValue={
-                        activity.defaultRankId ?? ranks[0]?.id ?? ""
-                      }
-                    >
-                      {ranks.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <FormSubmitButton size="sm" variant="secondary">
-                    Transfer ownership
-                  </FormSubmitButton>
-                </ActionForm>
-              )}
+              <TransferOwnershipDialog
+                activityId={id}
+                candidates={transferCandidates}
+                ranks={ranks}
+                defaultRankId={activity.defaultRankId}
+              />
             </CardContent>
           </Card>
         </div>

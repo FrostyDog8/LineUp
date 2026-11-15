@@ -237,6 +237,36 @@ export async function updateOccurrence(
   return mapOccurrence(row);
 }
 
+/**
+ * Manually open registration on upcoming scheduled events.
+ * Owner or manager (canEditEvents). Scheduled auto-open jobs are still future work.
+ */
+export async function openRegistrationNow(
+  activityId: string,
+  actorUserId: string,
+): Promise<number> {
+  const access = await getActivityAccess(activityId, actorUserId);
+  if (!access?.canEditEvents) {
+    throw new Error("You cannot open registration for this activity");
+  }
+
+  const db = requireDb();
+  const now = new Date();
+  const updated = await db
+    .update(occurrences)
+    .set({ status: "registration_open", updatedAt: now })
+    .where(
+      and(
+        eq(occurrences.activityId, activityId),
+        gt(occurrences.startsAt, now),
+        eq(occurrences.status, "scheduled"),
+      ),
+    )
+    .returning({ id: occurrences.id });
+
+  return updated.length;
+}
+
 /** Delete an upcoming event; weekly activities are topped up afterward. */
 export async function deleteOccurrence(
   activityId: string,

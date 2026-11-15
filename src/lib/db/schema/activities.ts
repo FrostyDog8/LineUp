@@ -41,9 +41,14 @@ export type ScheduleDefaultsJson = {
   registrationOpensWeekday?: number | null;
   /** Weekly: registration opens at this `HH:mm` in the activity timezone. */
   registrationOpensTime?: string | null;
-  /** Hours before start when ranks merge (fallback; not set on create UI yet). */
+  /**
+   * How registration opens: at the scheduled time/day, or only when an owner
+   * (or manager) opens it manually.
+   */
+  registrationOpensMode?: "scheduled" | "manual";
+  /** Hours before start when ranks merge (legacy fallback). */
   defaultRankMergeHoursBefore: number;
-  /** Optional per-rank merge timing: rankId -> hours before start. */
+  /** Optional per-rank merge timing: rankId -> hours before start (legacy). */
   rankMergeHoursBeforeByRankId?: Record<string, number>;
 };
 
@@ -52,6 +57,7 @@ export const DEFAULT_SCHEDULE_DEFAULTS: ScheduleDefaultsJson = {
   registrationOpensAt: null,
   registrationOpensWeekday: null,
   registrationOpensTime: null,
+  registrationOpensMode: "scheduled",
   defaultRankMergeHoursBefore: 24,
   rankMergeHoursBeforeByRankId: {},
 };

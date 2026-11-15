@@ -3,60 +3,87 @@ import { requireDb } from "@/lib/db";
 import { activities, memberships, ranks } from "@/lib/db/schema";
 import { getActivityAccess } from "./permissions";
 
+export type RankMergeMode = "manual" | "scheduled";
+
 export type RankRow = {
   id: string;
   activityId: string;
   name: string;
   sortPriority: number;
   isDefault: boolean;
+  mergeMode: RankMergeMode;
+  mergeAt: Date | null;
+  createdAt: Date;
 };
+
+function mapRank(row: typeof ranks.$inferSelect): RankRow {
+  return {
+    id: row.id,
+    activityId: row.activityId,
+    name: row.name,
+    sortPriority: row.sortPriority,
+    isDefault: row.isDefault,
+    mergeMode: row.mergeMode === "scheduled" ? "scheduled" : "manual",
+    mergeAt: row.mergeAt ?? null,
+    createdAt: row.createdAt,
+  };
+}
 
 export async function listRanks(activityId: string): Promise<RankRow[]> {
   const db = requireDb();
-  return db
-    .select({
-      id: ranks.id,
-      activityId: ranks.activityId,
-      name: ranks.name,
-      sortPriority: ranks.sortPriority,
-      isDefault: ranks.isDefault,
-    })
+  const rows = await db
+    .select()
     .from(ranks)
     .where(eq(ranks.activityId, activityId))
-    .orderBy(asc(ranks.sortPriority), asc(ranks.name));
+    .orderBy(asc(ranks.createdAt), asc(ranks.name));
+  return rows.map(mapRank);
 }
 
 export async function createRank(
   activityId: string,
   actorUserId: string,
-  input: { name: string; sortPriority?: number },
+  input: {
+    name?: string;
+    mergeMode?: RankMergeMode;
+    mergeAt?: Date | null;
+  } = {},
 ): Promise<RankRow> {
   const access = await getActivityAccess(activityId, actorUserId);
   if (!access?.canManageSettings) {
     throw new Error("Only the owner can create ranks");
   }
-  const name = input.name.trim();
-  if (!name) throw new Error("Rank name is required");
+  const name = (input.name ?? "New rank").trim() || "New rank";
+  const mergeMode = input.mergeMode === "scheduled" ? "scheduled" : "manual";
+  if (mergeMode === "scheduled" && !input.mergeAt) {
+    throw new Error("Pick a merge date and time");
+  }
 
   const db = requireDb();
+  const existing = await listRanks(activityId);
   const [row] = await db
     .insert(ranks)
     .values({
       activityId,
       name,
-      sortPriority: input.sortPriority ?? 100,
+      sortPriority: (existing.length + 1) * 10,
       isDefault: false,
+      mergeMode,
+      mergeAt: mergeMode === "scheduled" ? (input.mergeAt ?? null) : null,
     })
     .returning();
   if (!row) throw new Error("Failed to create rank");
-  return row;
+  return mapRank(row);
 }
 
 export async function updateRank(
   activityId: string,
   actorUserId: string,
   rankId: string,
-  input: { name?: string; sortPriority?: number },
+  input: {
+    name?: string;
+    mergeMode?: RankMergeMode;
+    mergeAt?: Date | null;
+  },
 ): Promise<RankRow> {
   const access = await getActivityAccess(activityId, actorUserId);
   if (!access?.canManageSettings) {
@@ -75,7 +102,23 @@ export async function updateRank(
     if (!name) throw new Error("Rank name is required");
     patch.name = name;
   }
-  if (input.sortPriority !== undefined) patch.sortPriority = input.sortPriority;
+  if (input.mergeMode !== undefined) {
+    const mergeMode =
+      input.mergeMode === "scheduled" ? "scheduled" : "manual";
+    patch.mergeMode = mergeMode;
+    if (mergeMode === "manual") {
+      patch.mergeAt = null;
+    } else if (input.mergeAt !== undefined) {
+      if (!input.mergeAt) throw new Error("Pick a merge date and time");
+      patch.mergeAt = input.mergeAt;
+    } else if (!existing.mergeAt) {
+      throw new Error("Pick a merge date and time");
+    }
+  } else if (input.mergeAt !== undefined) {
+    if (existing.mergeMode === "scheduled" || input.mergeAt) {
+      patch.mergeAt = input.mergeAt;
+    }
+  }
 
   const [row] = await db
     .update(ranks)
@@ -83,7 +126,7 @@ export async function updateRank(
     .where(eq(ranks.id, rankId))
     .returning();
   if (!row) throw new Error("Failed to update rank");
-  return row;
+  return mapRank(row);
 }
 
 export async function setDefaultRank(
@@ -106,9 +149,7 @@ export async function setDefaultRank(
     await tx
       .update(ranks)
       .set({ isDefault: false })
-      .where(
-        and(eq(ranks.activityId, activityId), ne(ranks.id, rankId)),
-      );
+      .where(and(eq(ranks.activityId, activityId), ne(ranks.id, rankId)));
     await tx
       .update(ranks)
       .set({ isDefault: true })
@@ -152,7 +193,10 @@ export async function deleteRank(
       .update(memberships)
       .set({ rankId: fallback.id, updatedAt: new Date() })
       .where(
-        and(eq(memberships.activityId, activityId), eq(memberships.rankId, rankId)),
+        and(
+          eq(memberships.activityId, activityId),
+          eq(memberships.rankId, rankId),
+        ),
       );
 
     if (activity?.defaultRankId === rankId) {

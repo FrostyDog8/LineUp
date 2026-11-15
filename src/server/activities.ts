@@ -178,6 +178,8 @@ function resolveScheduleDefaults(
     registrationOpensAt,
     registrationOpensWeekday: weekday,
     registrationOpensTime: time,
+    registrationOpensMode:
+      partial?.registrationOpensMode === "manual" ? "manual" : "scheduled",
     defaultRankMergeHoursBefore:
       typeof partial?.defaultRankMergeHoursBefore === "number" &&
       partial.defaultRankMergeHoursBefore >= 0
@@ -206,15 +208,17 @@ export async function createActivity(
   }
 
   const scheduleDefaults = resolveScheduleDefaults(input.scheduleDefaults);
-  if (input.scheduleMode === "weekly") {
-    if (
-      scheduleDefaults.registrationOpensWeekday == null ||
-      !scheduleDefaults.registrationOpensTime
-    ) {
-      throw new Error("Pick when registration opens (day and time)");
+  if (scheduleDefaults.registrationOpensMode !== "manual") {
+    if (input.scheduleMode === "weekly") {
+      if (
+        scheduleDefaults.registrationOpensWeekday == null ||
+        !scheduleDefaults.registrationOpensTime
+      ) {
+        throw new Error("Pick when registration opens (day and time)");
+      }
+    } else if (!scheduleDefaults.registrationOpensAt) {
+      throw new Error("Pick when registration opens (date and time)");
     }
-  } else if (!scheduleDefaults.registrationOpensAt) {
-    throw new Error("Pick when registration opens (date and time)");
   }
 
   const defaultPlace = input.defaultPlace?.trim() || null;

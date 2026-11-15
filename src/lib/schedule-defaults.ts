@@ -49,6 +49,8 @@ export function parseScheduleDefaults(
       registrationOpensAt: parseIsoOrNull(parsed.registrationOpensAt),
       registrationOpensWeekday: weekday,
       registrationOpensTime: time,
+      registrationOpensMode:
+        parsed.registrationOpensMode === "manual" ? "manual" : "scheduled",
       defaultRankMergeHoursBefore:
         typeof parsed.defaultRankMergeHoursBefore === "number" &&
         parsed.defaultRankMergeHoursBefore >= 0
@@ -76,6 +78,7 @@ export function stringifyScheduleDefaults(
     registrationOpensAt: defaults.registrationOpensAt ?? null,
     registrationOpensWeekday: defaults.registrationOpensWeekday ?? null,
     registrationOpensTime: defaults.registrationOpensTime ?? null,
+    registrationOpensMode: defaults.registrationOpensMode ?? "scheduled",
     defaultRankMergeHoursBefore: defaults.defaultRankMergeHoursBefore,
     rankMergeHoursBeforeByRankId: defaults.rankMergeHoursBeforeByRankId ?? {},
   });

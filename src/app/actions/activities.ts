@@ -23,6 +23,7 @@ import {
   createOccurrence,
   deleteOccurrence,
   ensureWeeklyOccurrences,
+  openRegistrationNow,
   updateOccurrence,
 } from "@/server/occurrences";
 import {
@@ -180,6 +181,11 @@ export async function updateSettingsAction(
   const defaultRankId = String(formData.get("defaultRankId") ?? "") || null;
   const name = String(formData.get("name") ?? "");
   const defaultPlace = String(formData.get("defaultPlace") ?? "");
+  const registrationOpensModeRaw = String(
+    formData.get("registrationOpensMode") ?? "scheduled",
+  );
+  const registrationOpensMode: "scheduled" | "manual" =
+    registrationOpensModeRaw === "manual" ? "manual" : "scheduled";
   const registrationOpensAtRaw = String(
     formData.get("registrationOpensAt") ?? "",
   ).trim();
@@ -213,7 +219,8 @@ export async function updateSettingsAction(
         registrationOpensTime ||
         existing.scheduleDefaults.registrationOpensTime ||
         null,
-      // Preserve stored merge default; create UI no longer sets it.
+      registrationOpensMode,
+      // Preserve stored merge default; per-rank merge lives on ranks now.
       defaultRankMergeHoursBefore:
         existing.scheduleDefaults.defaultRankMergeHoursBefore ?? 24,
     };
@@ -459,18 +466,10 @@ export async function saveManagerTogglesAction(
 
 export async function createRankAction(
   activityId: string,
-  _prev: ActionResult | null,
-  formData: FormData,
 ): Promise<ActionResult> {
   const user = await requireSessionUser();
-  const name = String(formData.get("name") ?? "");
-  const sortPriority = Number(formData.get("sortPriority") ?? 100);
-
   try {
-    await createRank(activityId, user.id, {
-      name,
-      sortPriority: Number.isFinite(sortPriority) ? sortPriority : 100,
-    });
+    await createRank(activityId, user.id, { name: "New rank" });
     revalidatePath(`/activities/${activityId}/settings`);
     return { ok: true, message: "Rank created." };
   } catch (err) {
@@ -484,17 +483,60 @@ export async function createRankAction(
 export async function updateRankAction(
   activityId: string,
   rankId: string,
+  _prev: ActionResult | null,
   formData: FormData,
-): Promise<void> {
+): Promise<ActionResult> {
   const user = await requireSessionUser();
   const name = String(formData.get("name") ?? "");
-  const sortPriority = Number(formData.get("sortPriority") ?? 100);
+  const mergeModeRaw = String(formData.get("mergeMode") ?? "manual");
+  const mergeMode = mergeModeRaw === "scheduled" ? "scheduled" : "manual";
+  const mergeAtRaw = String(formData.get("mergeAt") ?? "").trim();
 
-  await updateRank(activityId, user.id, rankId, {
-    name,
-    sortPriority: Number.isFinite(sortPriority) ? sortPriority : undefined,
-  });
-  revalidatePath(`/activities/${activityId}/settings`);
+  try {
+    const activity = await getActivityById(activityId);
+    if (!activity) throw new Error("Activity not found");
+    const mergeAt =
+      mergeMode === "scheduled" && mergeAtRaw
+        ? parseDateTimeLocal(mergeAtRaw, activity.timezone)
+        : null;
+
+    await updateRank(activityId, user.id, rankId, {
+      name,
+      mergeMode,
+      mergeAt,
+    });
+    revalidatePath(`/activities/${activityId}/settings`);
+    return { ok: true, message: "Rank saved." };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not update rank",
+    };
+  }
+}
+
+export async function openRegistrationNowAction(
+  activityId: string,
+): Promise<ActionResult> {
+  const user = await requireSessionUser();
+  try {
+    const count = await openRegistrationNow(activityId, user.id);
+    revalidatePath(`/activities/${activityId}`);
+    revalidatePath(`/activities/${activityId}/settings`);
+    return {
+      ok: true,
+      message:
+        count > 0
+          ? `Opened registration on ${count} upcoming event${count === 1 ? "" : "s"}.`
+          : "No upcoming scheduled events to open.",
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error ? err.message : "Could not open registration",
+    };
+  }
 }
 
 export async function deleteRankAction(
