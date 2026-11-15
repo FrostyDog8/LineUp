@@ -1,5 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { joinActivityAction } from "@/app/actions/activities";
+import { ActionForm } from "@/components/action-form";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { FormSubmitButton } from "@/components/form-submit-button";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,42 +14,54 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getSessionUser } from "@/lib/auth";
 
-/** Join-via-invite UI stub — invite slug resolution lands in M2. */
-export default function JoinActivityPage() {
+export const instant = false;
+
+type Props = {
+  searchParams: Promise<{ code?: string; invite?: string }>;
+};
+
+export default async function JoinActivityPage({ searchParams }: Props) {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+
+  const params = await searchParams;
+  const preset = params.code ?? params.invite ?? "";
+
   return (
     <DashboardShell
       title="Join activity"
       subtitle="Paste an invite link or code from an activity owner."
+      userLabel={user.displayName || user.phone}
     >
       <Card className="max-w-lg">
         <CardHeader>
           <CardTitle>Invite</CardTitle>
           <CardDescription>
-            Open join vs must-approve is configured per activity. This screen is
-            a placeholder until membership flows ship.
+            Open join adds you immediately. Must-approve creates a join request
+            for the owner (or a manager with approve permission).
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4" action="#">
+          <ActionForm action={joinActivityAction} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="invite">Invite link or code</Label>
               <Input
                 id="invite"
                 name="invite"
-                placeholder="https://…/join/abc123 or abc123"
-                disabled
+                placeholder="abc123 or https://…/activities/join?code=abc123"
+                defaultValue={preset}
+                required
               />
             </div>
             <div className="flex gap-3">
-              <Button type="button" disabled>
-                Join (coming in M2)
-              </Button>
+              <FormSubmitButton pendingLabel="Joining…">Join</FormSubmitButton>
               <Button asChild variant="outline">
                 <Link href="/dashboard">Cancel</Link>
               </Button>
             </div>
-          </form>
+          </ActionForm>
         </CardContent>
       </Card>
     </DashboardShell>

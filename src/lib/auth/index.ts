@@ -1,10 +1,30 @@
 import { betterAuth } from "better-auth";
+import { redirect } from "next/navigation";
 import { getAuthDelivery } from "./delivery";
+import {
+  createUserSession,
+  destroySession,
+  findOrCreateUserByPhone,
+  isAuthDevBypassEnabled,
+  readSessionUser,
+} from "./session";
+
+export type SessionUser = {
+  id: string;
+  phone: string;
+  displayName: string | null;
+};
+
+export {
+  createUserSession,
+  destroySession,
+  findOrCreateUserByPhone,
+  isAuthDevBypassEnabled,
+} from "./session";
 
 /**
- * Better Auth scaffold for LineUp.
- * Full phone OTP / magic-link wiring lands after the delivery cost spike.
- * Until DATABASE_URL + BETTER_AUTH_SECRET are set, handlers stay stub-safe.
+ * Better Auth remains available for a later Twilio/WhatsApp adapter swap.
+ * M2 sessions use our `sessions` table + httpOnly cookie (see session.ts).
  */
 const secret = process.env.BETTER_AUTH_SECRET;
 const baseURL =
@@ -26,8 +46,6 @@ function createAuth() {
     appName: "LineUp",
     secret,
     baseURL,
-    // Phone identity + Twilio/WhatsApp adapters are custom for MVP;
-    // keep email disabled as primary. Session tables use our Postgres later.
     emailAndPassword: {
       enabled: false,
     },
@@ -59,13 +77,34 @@ export async function startLoginChallenge(phone: string) {
   return delivery.sendMagicLink({ phone, url });
 }
 
-export type SessionUser = {
-  id: string;
-  phone: string;
-  displayName: string | null;
-};
-
-/** M1 stub: no real session until Better Auth + DB are wired. */
+/** Read the signed-in user from the session cookie + DB. */
 export async function getSessionUser(): Promise<SessionUser | null> {
-  return null;
+  return readSessionUser();
+}
+
+export async function requireSessionUser(): Promise<SessionUser> {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  return user;
+}
+
+/** Dev / bypass login: upsert user by phone and set a real session cookie. */
+export async function signInWithPhoneDev(
+  phone: string,
+  displayName?: string | null,
+): Promise<SessionUser> {
+  if (!isAuthDevBypassEnabled()) {
+    throw new Error("Dev login is disabled");
+  }
+  const user = await findOrCreateUserByPhone(phone, displayName);
+  await createUserSession(user.id);
+  return {
+    id: user.id,
+    phone: user.phone,
+    displayName: user.displayName,
+  };
+}
+
+export async function signOut(): Promise<void> {
+  await destroySession();
 }
