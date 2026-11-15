@@ -20,16 +20,18 @@ export async function devLoginAction(
   if (!isValidPhone(phone)) {
     return {
       ok: false,
-      error: "Use an E.164 phone like +972501234567",
+      error:
+        "Enter a valid phone for the selected country (e.g. Israel 0526257840 → +972526257840).",
     };
   }
 
   try {
     await signInWithPhoneDev(phone, displayName);
   } catch (err) {
+    const { formatDbError } = await import("@/lib/db");
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Login failed",
+      error: formatDbError(err),
     };
   }
 
