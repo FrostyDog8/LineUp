@@ -17,9 +17,13 @@ import {
 import { getSessionUser } from "@/lib/auth";
 import { getActivityById } from "@/server/activities";
 import { listMembers } from "@/server/memberships";
-import { listOccurrences } from "@/server/occurrences";
+import {
+  ensureWeeklyOccurrences,
+  listOccurrences,
+} from "@/server/occurrences";
 import { getActivityAccess } from "@/server/permissions";
 import { listRanks } from "@/server/ranks";
+import { weekdayLabel } from "@/lib/schedule-defaults";
 
 export const instant = false;
 
@@ -38,6 +42,8 @@ export default async function ActivityPage({ params }: Props) {
     redirect("/dashboard");
   }
 
+  await ensureWeeklyOccurrences(id);
+
   const [members, ranks, events] = await Promise.all([
     listMembers(id),
     listRanks(id),
@@ -50,7 +56,9 @@ export default async function ActivityPage({ params }: Props) {
     "http://localhost:3000";
   const inviteUrl = `${appUrl.replace(/\/$/, "")}/activities/join?code=${activity.inviteSlug}`;
   const scheduleLabel =
-    activity.scheduleMode === "one_time" ? "one-time" : "recurring";
+    activity.scheduleMode === "weekly"
+      ? `weekly · ${weekdayLabel(activity.weeklyWeekday)}${activity.weeklyTime ? ` ${activity.weeklyTime}` : ""}`
+      : "custom";
   const joinLabel =
     activity.joinMode === "open" ? "open join" : "approval required";
 
@@ -129,9 +137,9 @@ export default async function ActivityPage({ params }: Props) {
           <CardHeader>
             <CardTitle>Events</CardTitle>
             <CardDescription>
-              {activity.scheduleMode === "recurring_simple"
-                ? "Occurrences for this recurring activity. Capacity can override the activity default."
-                : "Single occurrence for this one-time activity."}
+              {activity.scheduleMode === "weekly"
+                ? "Weekly pattern keeps about five future events topped up. Capacity and place can override activity defaults."
+                : "Custom schedule — add future events as needed. Defaults prefill when you add an event."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -139,12 +147,14 @@ export default async function ActivityPage({ params }: Props) {
               activityId={id}
               timezone={activity.timezone}
               defaultCapacity={activity.defaultCapacity}
+              defaultPlace={activity.defaultPlace}
               scheduleMode={activity.scheduleMode}
               canEdit={access.canEditEvents}
               events={events.map((e) => ({
                 id: e.id,
                 startsAt: e.startsAt.toISOString(),
                 capacity: e.capacity,
+                place: e.place,
                 status: e.status,
                 notes: e.notes,
               }))}

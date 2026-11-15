@@ -15,6 +15,13 @@
       "when": 1794776179951,
       "tag": "0001_activity_tz_jerusalem_default",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794850000000,
+      "tag": "0002_schedule_weekly_custom",
+      "breakpoints": true
     }
   ]
 }

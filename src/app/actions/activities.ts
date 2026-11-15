@@ -21,6 +21,7 @@ import {
 } from "@/server/memberships";
 import {
   createOccurrence,
+  ensureWeeklyOccurrences,
   updateOccurrence,
 } from "@/server/occurrences";
 import {
@@ -61,25 +62,45 @@ export async function createActivityAction(
   const joinModeRaw = String(formData.get("joinMode") ?? "must_approve");
   const joinMode =
     joinModeRaw === "open" ? "open" : ("must_approve" as const);
-  const scheduleRaw = String(formData.get("scheduleMode") ?? "one_time");
+  const scheduleRaw = String(formData.get("scheduleMode") ?? "custom");
   const scheduleMode =
-    scheduleRaw === "recurring_simple"
-      ? ("recurring_simple" as const)
-      : ("one_time" as const);
+    scheduleRaw === "weekly" ? ("weekly" as const) : ("custom" as const);
   const defaultCapacity = Number(formData.get("defaultCapacity") ?? 18);
-  const startsAtRaw = String(formData.get("startsAt") ?? "");
+  const weeklyWeekdayRaw = String(formData.get("weeklyWeekday") ?? "");
+  const weeklyTime = String(formData.get("weeklyTime") ?? "").trim();
+  const defaultPlace = String(formData.get("defaultPlace") ?? "").trim();
+  const registrationOpensHoursBefore = Number(
+    formData.get("registrationOpensHoursBefore") ?? 48,
+  );
+  const defaultRankMergeHoursBefore = Number(
+    formData.get("defaultRankMergeHoursBefore") ?? 24,
+  );
 
   try {
-    const startsAt =
-      scheduleMode === "one_time"
-        ? parseDateTimeLocal(startsAtRaw, DEFAULT_TIMEZONE)
+    const weeklyWeekday =
+      scheduleMode === "weekly" && weeklyWeekdayRaw !== ""
+        ? Number(weeklyWeekdayRaw)
         : undefined;
 
     const activity = await createActivity(user.id, {
       name,
       joinMode,
       scheduleMode,
-      startsAt,
+      weeklyWeekday,
+      weeklyTime: scheduleMode === "weekly" ? weeklyTime : undefined,
+      defaultPlace: defaultPlace || null,
+      scheduleDefaults: {
+        registrationOpensHoursBefore: Number.isFinite(
+          registrationOpensHoursBefore,
+        )
+          ? registrationOpensHoursBefore
+          : 48,
+        defaultRankMergeHoursBefore: Number.isFinite(
+          defaultRankMergeHoursBefore,
+        )
+          ? defaultRankMergeHoursBefore
+          : 24,
+      },
       defaultCapacity: Number.isFinite(defaultCapacity) ? defaultCapacity : 18,
       timezone: DEFAULT_TIMEZONE,
       defaultRankName: "member",
@@ -139,6 +160,15 @@ export async function updateSettingsAction(
   const defaultCapacity = Number(formData.get("defaultCapacity"));
   const defaultRankId = String(formData.get("defaultRankId") ?? "") || null;
   const name = String(formData.get("name") ?? "");
+  const defaultPlace = String(formData.get("defaultPlace") ?? "");
+  const registrationOpensHoursBefore = Number(
+    formData.get("registrationOpensHoursBefore") ?? 48,
+  );
+  const defaultRankMergeHoursBefore = Number(
+    formData.get("defaultRankMergeHoursBefore") ?? 24,
+  );
+  const weeklyWeekdayRaw = String(formData.get("weeklyWeekday") ?? "");
+  const weeklyTimeRaw = String(formData.get("weeklyTime") ?? "").trim();
 
   try {
     await updateActivitySettings(activityId, user.id, {
@@ -148,10 +178,27 @@ export async function updateSettingsAction(
         : undefined,
       defaultRankId,
       name: name || undefined,
+      defaultPlace,
+      scheduleDefaults: {
+        registrationOpensHoursBefore: Number.isFinite(
+          registrationOpensHoursBefore,
+        )
+          ? registrationOpensHoursBefore
+          : 48,
+        defaultRankMergeHoursBefore: Number.isFinite(
+          defaultRankMergeHoursBefore,
+        )
+          ? defaultRankMergeHoursBefore
+          : 24,
+      },
+      weeklyWeekday:
+        weeklyWeekdayRaw === "" ? undefined : Number(weeklyWeekdayRaw),
+      weeklyTime: weeklyTimeRaw === "" ? undefined : weeklyTimeRaw,
     });
     if (defaultRankId) {
       await setDefaultRank(activityId, user.id, defaultRankId);
     }
+    await ensureWeeklyOccurrences(activityId);
     revalidatePath(`/activities/${activityId}`);
     revalidatePath(`/activities/${activityId}/settings`);
     return { ok: true, message: "Settings saved." };
@@ -174,6 +221,7 @@ export async function createOccurrenceAction(
 
   const startsAtRaw = String(formData.get("startsAt") ?? "");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
+  const placeRaw = String(formData.get("place") ?? "");
   const notes = String(formData.get("notes") ?? "");
 
   try {
@@ -188,8 +236,10 @@ export async function createOccurrenceAction(
     await createOccurrence(activityId, user.id, {
       startsAt,
       capacity,
+      place: placeRaw.trim() || null,
       notes: notes || null,
     });
+    await ensureWeeklyOccurrences(activityId);
     revalidatePath(`/activities/${activityId}`);
     return { ok: true, message: "Event added." };
   } catch (err) {
@@ -212,6 +262,7 @@ export async function updateOccurrenceAction(
 
   const startsAtRaw = String(formData.get("startsAt") ?? "");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
+  const placeRaw = String(formData.get("place") ?? "");
   const notes = String(formData.get("notes") ?? "");
 
   try {
@@ -226,8 +277,10 @@ export async function updateOccurrenceAction(
     await updateOccurrence(activityId, user.id, occurrenceId, {
       startsAt,
       capacity,
+      place: placeRaw.trim() || null,
       notes: notes || null,
     });
+    await ensureWeeklyOccurrences(activityId);
     revalidatePath(`/activities/${activityId}`);
     return { ok: true, message: "Event updated." };
   } catch (err) {
@@ -390,10 +443,19 @@ export async function updateRankAction(
 export async function deleteRankAction(
   activityId: string,
   rankId: string,
+  _prev: ActionResult | null,
   _formData?: FormData,
-): Promise<void> {
+): Promise<ActionResult> {
   void _formData;
   const user = await requireSessionUser();
-  await deleteRank(activityId, user.id, rankId);
-  revalidatePath(`/activities/${activityId}/settings`);
+  try {
+    await deleteRank(activityId, user.id, rankId);
+    revalidatePath(`/activities/${activityId}/settings`);
+    return { ok: true, message: "Rank deleted." };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not delete rank",
+    };
+  }
 }

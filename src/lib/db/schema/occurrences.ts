@@ -22,6 +22,8 @@ export const occurrences = pgTable("occurrences", {
     .references(() => activities.id, { onDelete: "cascade" }),
   startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
   capacity: integer("capacity"),
+  /** Venue override; null means use activity defaultPlace. */
+  place: text("place"),
   status: occurrenceStatusEnum("status").notNull().default("scheduled"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true })
