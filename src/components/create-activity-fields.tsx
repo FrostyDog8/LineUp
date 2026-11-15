@@ -16,9 +16,9 @@ export function CreateActivityFields() {
   const minStart = minDateTimeLocal(DEFAULT_TZ);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
-      <div className="space-y-4">
-        <div className="space-y-2">
+    <div className="grid gap-3 lg:grid-cols-2 lg:gap-4">
+      <div className="space-y-3">
+        <div className="space-y-1">
           <Label htmlFor="name">Name</Label>
           <Input
             id="name"
@@ -28,7 +28,7 @@ export function CreateActivityFields() {
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label>Schedule</Label>
           <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/50 p-1">
             <input type="hidden" name="scheduleMode" value={scheduleMode} />
@@ -48,8 +48,8 @@ export function CreateActivityFields() {
                   onClick={() => setScheduleMode(opt.value)}
                   className={
                     selected
-                      ? "rounded-md bg-card px-3 py-2 text-sm font-medium text-foreground shadow-sm"
-                      : "rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+                      ? "rounded-md bg-card px-2.5 py-1.5 text-sm font-medium text-foreground shadow-sm"
+                      : "rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
                   }
                 >
                   {opt.label}
@@ -57,16 +57,18 @@ export function CreateActivityFields() {
               );
             })}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {scheduleMode === "one_time"
-              ? "Creates a single future event so people can register."
-              : scheduleMode === "weekly"
-                ? "Fills the next 5 future events from your weekly pattern. Each event can override defaults later."
-                : "Starts with an empty events list. Add future events after create."}
-          </p>
+          {scheduleMode === "one_time" ? (
+            <p className="text-xs text-muted-foreground">
+              Creates a single future event so people can register.
+            </p>
+          ) : scheduleMode === "custom" ? (
+            <p className="text-xs text-muted-foreground">
+              Starts with an empty events list. Add future events after create.
+            </p>
+          ) : null}
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="defaultCapacity">Default capacity</Label>
           <Input
             id="defaultCapacity"
@@ -78,7 +80,7 @@ export function CreateActivityFields() {
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label>Join mode</Label>
           <SegmentedToggle
             name="joinMode"
@@ -96,10 +98,10 @@ export function CreateActivityFields() {
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {scheduleMode === "one_time" ? (
-          <div className="space-y-4 rounded-lg border border-border p-3 sm:p-4">
-            <div className="space-y-2">
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            <div className="space-y-1">
               <Label htmlFor="startsAt">Starts at</Label>
               <Input
                 id="startsAt"
@@ -109,10 +111,10 @@ export function CreateActivityFields() {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Timezone Asia/Jerusalem (server default). Must be in the future.
+                Must be in the future.
               </p>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="defaultPlace">Place</Label>
               <Input
                 id="defaultPlace"
@@ -120,7 +122,7 @@ export function CreateActivityFields() {
                 placeholder="Central park courts"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="registrationOpensAt">Registration opens</Label>
               <Input
                 id="registrationOpensAt"
@@ -128,17 +130,14 @@ export function CreateActivityFields() {
                 type="datetime-local"
                 required
               />
-              <p className="text-xs text-muted-foreground">
-                Date and time when registration opens for this event.
-              </p>
             </div>
           </div>
         ) : null}
 
         {scheduleMode === "weekly" ? (
-          <div className="space-y-4 rounded-lg border border-border p-3 sm:p-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="space-y-1">
                 <Label htmlFor="weeklyWeekday">Day of week</Label>
                 <select
                   id="weeklyWeekday"
@@ -154,7 +153,7 @@ export function CreateActivityFields() {
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <Label htmlFor="weeklyTime">Time</Label>
                 <Input
                   id="weeklyTime"
@@ -165,10 +164,7 @@ export function CreateActivityFields() {
                 />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Timezone Asia/Jerusalem (server default).
-            </p>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="defaultPlace">Place</Label>
               <Input
                 id="defaultPlace"
@@ -176,51 +172,39 @@ export function CreateActivityFields() {
                 placeholder="Central park courts"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Registration opens</Label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="registrationOpensWeekday" className="sr-only">
-                    Registration day
-                  </Label>
-                  <select
-                    id="registrationOpensWeekday"
-                    name="registrationOpensWeekday"
-                    required
-                    defaultValue="1"
-                    className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
-                  >
-                    {WEEKDAY_OPTIONS.map((d) => (
-                      <option key={d.value} value={d.value}>
-                        {d.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="registrationOpensTime" className="sr-only">
-                    Registration time
-                  </Label>
-                  <Input
-                    id="registrationOpensTime"
-                    name="registrationOpensTime"
-                    type="time"
-                    defaultValue="12:00"
-                    required
-                  />
-                </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <select
+                  id="registrationOpensWeekday"
+                  name="registrationOpensWeekday"
+                  required
+                  defaultValue="1"
+                  aria-label="Registration day"
+                  className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
+                >
+                  {WEEKDAY_OPTIONS.map((d) => (
+                    <option key={d.value} value={d.value}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  id="registrationOpensTime"
+                  name="registrationOpensTime"
+                  type="time"
+                  defaultValue="12:00"
+                  required
+                  aria-label="Registration time"
+                />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Weekly default for when registration opens (day + time).
-                Individual events can override later.
-              </p>
             </div>
           </div>
         ) : null}
 
         {scheduleMode === "custom" ? (
-          <div className="space-y-4 rounded-lg border border-border p-3 sm:p-4">
-            <div className="space-y-2">
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            <div className="space-y-1">
               <Label htmlFor="defaultPlace">Default place</Label>
               <Input
                 id="defaultPlace"
@@ -228,7 +212,7 @@ export function CreateActivityFields() {
                 placeholder="Optional venue"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="registrationOpensAt">Registration opens</Label>
               <Input
                 id="registrationOpensAt"
@@ -236,10 +220,6 @@ export function CreateActivityFields() {
                 type="datetime-local"
                 required
               />
-              <p className="text-xs text-muted-foreground">
-                Default date and time when registration opens. Events can
-                override later.
-              </p>
             </div>
           </div>
         ) : null}

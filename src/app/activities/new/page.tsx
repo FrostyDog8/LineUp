@@ -24,22 +24,22 @@ export default async function NewActivityPage() {
   return (
     <DashboardShell
       title="Create activity"
-      subtitle="You become the owner. Default ranks member + New are created."
+      subtitle="You become the owner. Invite link is generated on create."
       userLabel={user.displayName || user.phone}
       askForName={!user.displayName?.trim()}
+      compact
     >
       <Card className="w-full max-w-4xl">
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle>New activity</CardTitle>
           <CardDescription>
             Choose One-time, Weekly, or Custom; then join mode and capacity.
-            Invite link is generated on create.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <ActionForm action={createActivityAction} className="space-y-6">
+        <CardContent className="pt-0">
+          <ActionForm action={createActivityAction} className="space-y-4">
             <CreateActivityFields />
-            <div className="flex flex-wrap gap-3 border-t border-border pt-4">
+            <div className="flex flex-wrap gap-3 border-t border-border pt-3">
               <FormSubmitButton pendingLabel="Creating…">Create</FormSubmitButton>
               <Button asChild variant="outline">
                 <Link href="/dashboard">Cancel</Link>
