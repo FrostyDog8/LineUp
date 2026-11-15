@@ -57,15 +57,6 @@ export function CreateActivityFields() {
               );
             })}
           </div>
-          {scheduleMode === "one_time" ? (
-            <p className="text-xs text-muted-foreground">
-              Creates a single future event so people can register.
-            </p>
-          ) : scheduleMode === "custom" ? (
-            <p className="text-xs text-muted-foreground">
-              Starts with an empty events list. Add future events after create.
-            </p>
-          ) : null}
         </div>
 
         <div className="space-y-1">

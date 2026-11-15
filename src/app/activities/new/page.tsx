@@ -5,13 +5,7 @@ import { CreateActivityFields } from "@/components/create-activity-fields";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { getSessionUser } from "@/lib/auth";
 import Link from "next/link";
 
@@ -30,13 +24,7 @@ export default async function NewActivityPage() {
       compact
     >
       <Card className="w-full max-w-4xl">
-        <CardHeader className="pb-3">
-          <CardTitle>New activity</CardTitle>
-          <CardDescription>
-            Choose One-time, Weekly, or Custom; then join mode and capacity.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className="pt-4">
           <ActionForm action={createActivityAction} className="space-y-4">
             <CreateActivityFields />
             <div className="flex flex-wrap gap-3 border-t border-border pt-3">
