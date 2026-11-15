@@ -14,6 +14,7 @@ export type OccurrenceRow = {
   capacity: number | null;
   place: string | null;
   status: "scheduled" | "registration_open" | "closed" | "cancelled";
+  subHeadline: string | null;
   notes: string | null;
 };
 
@@ -21,6 +22,7 @@ export type CreateOccurrenceInput = {
   startsAt: Date;
   capacity?: number | null;
   place?: string | null;
+  subHeadline?: string | null;
   notes?: string | null;
 };
 
@@ -28,6 +30,7 @@ export type UpdateOccurrenceInput = {
   startsAt?: Date;
   capacity?: number | null;
   place?: string | null;
+  subHeadline?: string | null;
   notes?: string | null;
   status?: OccurrenceRow["status"];
 };
@@ -50,6 +53,7 @@ function mapOccurrence(row: typeof occurrences.$inferSelect): OccurrenceRow {
     capacity: row.capacity,
     place: row.place,
     status: row.status,
+    subHeadline: row.subHeadline,
     notes: row.notes,
   };
 }
@@ -170,6 +174,7 @@ export async function createOccurrence(
       startsAt: input.startsAt,
       capacity: input.capacity ?? null,
       place: input.place?.trim() || null,
+      subHeadline: input.subHeadline?.trim() || null,
       notes: input.notes?.trim() || null,
     })
     .returning();
@@ -209,6 +214,9 @@ export async function updateOccurrence(
   if (input.startsAt !== undefined) patch.startsAt = input.startsAt;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
   if (input.place !== undefined) patch.place = input.place?.trim() || null;
+  if (input.subHeadline !== undefined) {
+    patch.subHeadline = input.subHeadline?.trim() || null;
+  }
   if (input.notes !== undefined) patch.notes = input.notes?.trim() || null;
   if (input.status !== undefined) patch.status = input.status;
 

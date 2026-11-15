@@ -25,6 +25,8 @@ export const occurrences = pgTable("occurrences", {
   /** Venue override; null means use activity defaultPlace. */
   place: text("place"),
   status: occurrenceStatusEnum("status").notNull().default("scheduled"),
+  /** Optional short title within a series (shown under the start time). */
+  subHeadline: text("sub_headline"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

@@ -1,29 +1,17 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import {
-  JoinRequestsPanel,
-  MembersPanel,
-} from "@/components/member-actions";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { EventsPanel } from "@/components/events-panel";
+import { InviteDialog } from "@/components/invite-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { getSessionUser } from "@/lib/auth";
+import { weekdayLabel } from "@/lib/schedule-defaults";
 import { getActivityById } from "@/server/activities";
-import { listMembers } from "@/server/memberships";
 import {
   ensureWeeklyOccurrences,
   listOccurrences,
 } from "@/server/occurrences";
 import { getActivityAccess } from "@/server/permissions";
-import { listRanks } from "@/server/ranks";
-import { weekdayLabel } from "@/lib/schedule-defaults";
 
 export const instant = false;
 
@@ -43,13 +31,8 @@ export default async function ActivityPage({ params }: Props) {
   }
 
   await ensureWeeklyOccurrences(id);
+  const events = await listOccurrences(id);
 
-  const [members, ranks, events] = await Promise.all([
-    listMembers(id),
-    listRanks(id),
-    listOccurrences(id),
-  ]);
-  const requests = members.filter((m) => m.status === "requested");
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
     process.env.BETTER_AUTH_URL ??
@@ -70,124 +53,53 @@ export default async function ActivityPage({ params }: Props) {
       subtitle={`${scheduleLabel} · ${joinLabel}`}
       userLabel={user.displayName || user.phone}
       askForName={!user.displayName?.trim()}
+      compact
     >
       {access.status === "requested" ? (
-        <p className="mb-6 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+        <p className="mb-3 rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
           Your join request is pending approval.
         </p>
       ) : null}
 
-      <div className="mb-6 flex flex-wrap gap-3">
+      <div className="mb-4 flex flex-wrap gap-2">
+        <InviteDialog
+          inviteUrl={inviteUrl}
+          inviteCode={activity.inviteSlug}
+          activityName={activity.name}
+        />
+        {access.status === "active" ? (
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/activities/${id}/members`}>Members</Link>
+          </Button>
+        ) : null}
         {access.canManageSettings ? (
           <Button asChild variant="outline" size="sm">
             <Link href={`/activities/${id}/settings`}>Settings</Link>
           </Button>
         ) : null}
-        <Button asChild variant="outline" size="sm">
-          <Link href="/dashboard">Back to dashboard</Link>
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/dashboard">Dashboard</Link>
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Invite</CardTitle>
-            <CardDescription>
-              Share this code or link. Capacity default: {activity.defaultCapacity}.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p>
-              <span className="text-muted-foreground">Code:</span>{" "}
-              <code className="rounded bg-muted px-1.5 py-0.5">
-                {activity.inviteSlug}
-              </code>
-            </p>
-            <p className="break-all">
-              <span className="text-muted-foreground">Link:</span> {inviteUrl}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Your role:</span>{" "}
-              {access.role}
-            </p>
-          </CardContent>
-        </Card>
-
-        {access.canApproveJoins ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Join requests</CardTitle>
-              <CardDescription>
-                Approve and set rank (default offered).
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <JoinRequestsPanel
-                activityId={id}
-                requests={requests}
-                ranks={ranks}
-                access={access}
-                defaultRankId={activity.defaultRankId}
-              />
-            </CardContent>
-          </Card>
-        ) : null}
-      </div>
-
       {access.status === "active" ? (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>Events</CardTitle>
-            <CardDescription>
-              {activity.scheduleMode === "weekly"
-                ? "Weekly pattern keeps about five future events topped up. Capacity and place can override activity defaults."
-                : activity.scheduleMode === "one_time"
-                  ? "One-time activity — a single event. Capacity and place can override activity defaults."
-                  : "Custom schedule — add future events as needed. Defaults prefill when you add an event."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <EventsPanel
-              activityId={id}
-              timezone={activity.timezone}
-              defaultCapacity={activity.defaultCapacity}
-              defaultPlace={activity.defaultPlace}
-              scheduleMode={activity.scheduleMode}
-              canEdit={access.canEditEvents}
-              events={events.map((e) => ({
-                id: e.id,
-                startsAt: e.startsAt.toISOString(),
-                capacity: e.capacity,
-                place: e.place,
-                status: e.status,
-                notes: e.notes,
-              }))}
-            />
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {access.status === "active" ? (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>Members</CardTitle>
-            <CardDescription>
-              Active members
-              {access.canChangeRanks || access.canPromoteManagers
-                ? " — manage ranks and managers below"
-                : ""}
-              .
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MembersPanel
-              activityId={id}
-              members={members}
-              ranks={ranks}
-              access={access}
-            />
-          </CardContent>
-        </Card>
+        <EventsPanel
+          activityId={id}
+          timezone={activity.timezone}
+          defaultCapacity={activity.defaultCapacity}
+          defaultPlace={activity.defaultPlace}
+          scheduleMode={activity.scheduleMode}
+          canEdit={access.canEditEvents}
+          events={events.map((e) => ({
+            id: e.id,
+            startsAt: e.startsAt.toISOString(),
+            capacity: e.capacity,
+            place: e.place,
+            status: e.status,
+            subHeadline: e.subHeadline,
+            notes: e.notes,
+          }))}
+        />
       ) : null}
     </DashboardShell>
   );

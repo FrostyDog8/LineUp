@@ -257,6 +257,7 @@ export async function createOccurrenceAction(
   const startsAtRaw = String(formData.get("startsAt") ?? "");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const placeRaw = String(formData.get("place") ?? "");
+  const subHeadline = String(formData.get("subHeadline") ?? "").trim();
   const notes = String(formData.get("notes") ?? "");
 
   try {
@@ -272,6 +273,7 @@ export async function createOccurrenceAction(
       startsAt,
       capacity,
       place: placeRaw.trim() || null,
+      subHeadline: subHeadline || null,
       notes: notes || null,
     });
     await ensureWeeklyOccurrences(activityId);
@@ -298,6 +300,7 @@ export async function updateOccurrenceAction(
   const startsAtRaw = String(formData.get("startsAt") ?? "");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const placeRaw = String(formData.get("place") ?? "");
+  const subHeadline = String(formData.get("subHeadline") ?? "").trim();
   const notes = String(formData.get("notes") ?? "");
 
   try {
@@ -313,6 +316,7 @@ export async function updateOccurrenceAction(
       startsAt,
       capacity,
       place: placeRaw.trim() || null,
+      subHeadline: subHeadline || null,
       notes: notes || null,
     });
     await ensureWeeklyOccurrences(activityId);
