@@ -236,3 +236,30 @@ export async function updateOccurrence(
 
   return mapOccurrence(row);
 }
+
+/** Delete an upcoming event; weekly activities are topped up afterward. */
+export async function deleteOccurrence(
+  activityId: string,
+  actorUserId: string,
+  occurrenceId: string,
+): Promise<void> {
+  await assertCanEditEvents(activityId, actorUserId);
+
+  const existing = await getOccurrence(activityId, occurrenceId);
+  if (!existing) throw new Error("Event not found");
+  if (existing.startsAt.getTime() <= Date.now()) {
+    throw new Error("Only upcoming events can be removed");
+  }
+
+  const db = requireDb();
+  await db
+    .delete(occurrences)
+    .where(
+      and(
+        eq(occurrences.id, occurrenceId),
+        eq(occurrences.activityId, activityId),
+      ),
+    );
+
+  await ensureWeeklyOccurrences(activityId);
+}

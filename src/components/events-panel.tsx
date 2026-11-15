@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   createOccurrenceAction,
+  deleteOccurrenceAction,
   updateOccurrenceAction,
   type ActionResult,
 } from "@/app/actions/activities";
@@ -48,11 +49,36 @@ export function EventsPanel({
   canEdit,
   events,
 }: Props) {
+  const router = useRouter();
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
   const canAdd = canEdit;
   const minStart = minDateTimeLocal(timezone);
   const boundCreate = createOccurrenceAction.bind(null, activityId);
+
+  async function confirmRemove() {
+    if (!removingId) return;
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      const result = await deleteOccurrenceAction(activityId, removingId);
+      if (!result.ok) {
+        setRemoveError(result.error);
+        return;
+      }
+      setRemovingId(null);
+      router.refresh();
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  const removingEvent = removingId
+    ? events.find((e) => e.id === removingId)
+    : null;
 
   return (
     <div className="space-y-3">
@@ -109,13 +135,25 @@ export function EventsPanel({
                     </p>
                   </div>
                   {canEdit && !isPast ? (
-                    <button
-                      type="button"
-                      className="text-sm text-muted-foreground underline-offset-2 hover:underline"
-                      onClick={() => setEditingId(event.id)}
-                    >
-                      Edit
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+                        onClick={() => setEditingId(event.id)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="text-sm text-red-700 underline-offset-2 hover:underline"
+                        onClick={() => {
+                          setRemoveError(null);
+                          setRemovingId(event.id);
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               </li>
@@ -123,6 +161,66 @@ export function EventsPanel({
           })}
         </ul>
       )}
+
+      {removingEvent ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-event-title"
+          onClick={() => !removing && setRemovingId(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-border bg-card p-5 text-card-foreground shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2
+              id="remove-event-title"
+              className="font-display text-xl tracking-tight text-foreground"
+            >
+              Remove event?
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Remove{" "}
+              {formatEventWhen(
+                new Date(removingEvent.startsAt),
+                timezone,
+              )}
+              {removingEvent.subHeadline
+                ? ` (${removingEvent.subHeadline})`
+                : ""}
+              ? This cannot be undone.
+              {scheduleMode === "weekly"
+                ? " A later weekly event may be added to keep the upcoming list topped up."
+                : ""}
+            </p>
+            {removeError ? (
+              <p className="mt-2 text-sm text-red-700" role="alert">
+                {removeError}
+              </p>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={removing}
+                onClick={() => void confirmRemove()}
+              >
+                {removing ? "Removing…" : "Remove"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={removing}
+                onClick={() => setRemovingId(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {adding ? (
         <EventDialog

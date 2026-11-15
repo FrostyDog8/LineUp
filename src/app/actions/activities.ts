@@ -21,6 +21,7 @@ import {
 } from "@/server/memberships";
 import {
   createOccurrence,
+  deleteOccurrence,
   ensureWeeklyOccurrences,
   updateOccurrence,
 } from "@/server/occurrences";
@@ -326,6 +327,23 @@ export async function updateOccurrenceAction(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Could not update event",
+    };
+  }
+}
+
+export async function deleteOccurrenceAction(
+  activityId: string,
+  occurrenceId: string,
+): Promise<ActionResult> {
+  const user = await requireSessionUser();
+  try {
+    await deleteOccurrence(activityId, user.id, occurrenceId);
+    revalidatePath(`/activities/${activityId}`);
+    return { ok: true, message: "Event removed." };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not remove event",
     };
   }
 }
