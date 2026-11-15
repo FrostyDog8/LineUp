@@ -34,6 +34,7 @@ export default async function JoinActivityPage({ searchParams }: Props) {
       title="Join activity"
       subtitle="Paste an invite link or code from an activity owner."
       userLabel={user.displayName || user.phone}
+      askForName={!user.displayName?.trim()}
     >
       <Card className="max-w-lg">
         <CardHeader>

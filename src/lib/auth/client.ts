@@ -39,11 +39,11 @@ export async function verifyLoginCode(phone: string, code: string) {
   return res.json() as Promise<{ ok: boolean; stubbed?: boolean }>;
 }
 
-export async function requestDevLogin(phone: string, displayName?: string) {
+export async function requestDevLogin(phone: string) {
   const res = await fetch("/api/auth/dev-login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone, displayName: displayName || null }),
+    body: JSON.stringify({ phone }),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };

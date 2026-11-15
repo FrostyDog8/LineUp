@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error:
-          "Enter a valid phone for the selected country (e.g. Israel 0526257840 → +972526257840).",
+          "Enter a valid phone for the selected country (e.g. Israel 0500000000 → +972500000000).",
       },
       { status: 400 },
     );

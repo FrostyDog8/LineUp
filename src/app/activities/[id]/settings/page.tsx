@@ -57,6 +57,7 @@ export default async function ActivitySettingsPage({ params }: Props) {
       title="Activity settings"
       subtitle={activity.name}
       userLabel={user.displayName || user.phone}
+      askForName={!user.displayName?.trim()}
     >
       <div className="mb-6">
         <Button asChild variant="outline" size="sm">

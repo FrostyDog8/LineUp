@@ -14,9 +14,10 @@ export default async function DashboardPage() {
 
   const activities = await listMyActivities(user.id);
   const label = user.displayName || user.phone;
+  const askForName = !user.displayName?.trim();
 
   return (
-    <DashboardShell userLabel={label}>
+    <DashboardShell userLabel={label} askForName={askForName}>
       <div className="mb-6 flex flex-wrap gap-3 sm:hidden">
         <Button asChild size="sm">
           <Link href="/activities/new">Create</Link>

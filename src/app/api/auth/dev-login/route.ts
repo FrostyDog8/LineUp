@@ -5,7 +5,6 @@ import { formatDbError } from "@/lib/db";
 
 const bodySchema = z.object({
   phone: z.string().min(8).max(32),
-  displayName: z.string().max(80).optional().nullable(),
 });
 
 export async function POST(request: Request) {
@@ -33,17 +32,14 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error:
-          "Enter a valid phone for the selected country (e.g. Israel 0526257840 → +972526257840).",
+          "Enter a valid phone for the selected country (e.g. Israel 0500000000 → +972500000000).",
       },
       { status: 400 },
     );
   }
 
   try {
-    const user = await signInWithPhoneDev(
-      phone,
-      parsed.data.displayName ?? null,
-    );
+    const user = await signInWithPhoneDev(phone);
     return Response.json({ ok: true, user });
   } catch (err) {
     return Response.json(

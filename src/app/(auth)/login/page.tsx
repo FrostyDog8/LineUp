@@ -27,7 +27,6 @@ export default function LoginPage() {
   const [country, setCountry] = useState<CountryCode>(DEFAULT_COUNTRY);
   const [countryTouched, setCountryTouched] = useState(false);
   const [nationalNumber, setNationalNumber] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [message, setMessage] = useState<string | null>(null);
@@ -89,7 +88,7 @@ export default function LoginPage() {
     }
     setPending(true);
     try {
-      await requestDevLogin(phone, displayName.trim() || undefined);
+      await requestDevLogin(phone);
       window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Dev login failed");
@@ -152,19 +151,6 @@ export default function LoginPage() {
                 disabled={pending}
                 required
               />
-              {devBypass ? (
-                <div className="space-y-2">
-                  <Label htmlFor="displayName">Display name (optional)</Label>
-                  <Input
-                    id="displayName"
-                    name="displayName"
-                    placeholder="Omer"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    autoComplete="nickname"
-                  />
-                </div>
-              ) : null}
               {devBypass ? (
                 <Button type="submit" className="w-full" disabled={pending}>
                   {pending ? "Signing in…" : "Dev sign-in"}

@@ -71,7 +71,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 1. Ensure `.env.local` has a working `DATABASE_URL` (Supabase pooled URI for `gehjyxyciymdwywjyfyx`) and `BETTER_AUTH_SECRET`.
 2. Dev login is on in development (`NODE_ENV=development`). Or set `AUTH_DEV_BYPASS=true`.
-3. Open `/login` → country defaults via IP (fallback **Israel +972**) → type a national number (e.g. `0526257840`) → **Dev sign-in**. App stores/queries E.164 (`+972526257840`).
+3. Open `/login` → country defaults via IP (fallback **Israel +972**) → type a national number (e.g. `0500000000`) → **Dev sign-in**. App stores/queries E.164 (`+972500000000`). Name is collected after login via a “Let’s meet” prompt if `display_name` is empty.
 4. **Create** an activity (`/activities/new`) with must-approve or open join.
 5. Copy the invite code from the activity page.
 6. Sign out → sign in as a second phone → **Join** with the code.

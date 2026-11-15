@@ -68,7 +68,7 @@ export function isCountryCode(value: string): value is CountryCode {
 /**
  * Normalize raw input to E.164.
  * Accepts full international (+972…) or national digits with a country
- * (e.g. IL + 0526257840 → +972526257840).
+ * (e.g. IL + 0500000000 → +972500000000).
  */
 export function normalizePhone(
   raw: string,

@@ -89,14 +89,11 @@ export async function requireSessionUser(): Promise<SessionUser> {
 }
 
 /** Dev / bypass login: upsert user by phone and set a real session cookie. */
-export async function signInWithPhoneDev(
-  phone: string,
-  displayName?: string | null,
-): Promise<SessionUser> {
+export async function signInWithPhoneDev(phone: string): Promise<SessionUser> {
   if (!isAuthDevBypassEnabled()) {
     throw new Error("Dev login is disabled");
   }
-  const user = await findOrCreateUserByPhone(phone, displayName);
+  const user = await findOrCreateUserByPhone(phone);
   await createUserSession(user.id);
   return {
     id: user.id,
