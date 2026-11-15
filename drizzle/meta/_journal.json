@@ -50,6 +50,13 @@
       "when": 1794854000000,
       "tag": "0006_rank_merge_weekday",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794855000000,
+      "tag": "0007_occurrence_rank_merges",
+      "breakpoints": true
     }
   ]
 }

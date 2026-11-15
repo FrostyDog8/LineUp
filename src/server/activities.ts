@@ -275,6 +275,7 @@ export async function createActivity(
         name: defaultRankName,
         sortPriority: 10,
         isDefault: true,
+        mergeMode: "from_open",
       })
       .returning();
     if (!defaultRank) throw new Error("Failed to create default rank");
@@ -284,6 +285,7 @@ export async function createActivity(
       name: "New",
       sortPriority: 100,
       isDefault: false,
+      mergeMode: "manual",
     });
 
     await tx

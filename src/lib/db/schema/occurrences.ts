@@ -4,9 +4,11 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { activities } from "./activities";
+import { ranks } from "./ranks";
 
 export const occurrenceStatusEnum = pgEnum("occurrence_status", [
   "scheduled",
@@ -50,3 +52,31 @@ export const policyJobs = pgTable("policy_jobs", {
     .defaultNow()
     .notNull(),
 });
+
+/** Which ranks have been merged onto the main line for an occurrence. */
+export const occurrenceRankMerges = pgTable(
+  "occurrence_rank_merges",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    occurrenceId: uuid("occurrence_id")
+      .notNull()
+      .references(() => occurrences.id, { onDelete: "cascade" }),
+    rankId: uuid("rank_id")
+      .notNull()
+      .references(() => ranks.id, { onDelete: "cascade" }),
+    mergedAt: timestamp("merged_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    /** from_open | schedule | manual */
+    source: text("source").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("occurrence_rank_merges_occurrence_rank_uid").on(
+      t.occurrenceId,
+      t.rankId,
+    ),
+  ],
+);

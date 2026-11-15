@@ -274,6 +274,10 @@ export async function openRegistrationForOccurrence(
     .returning({ id: occurrences.id });
 
   if (!row) throw new Error("Could not open registration");
+
+  // Apply from_open rank merges immediately (lazy scheduled merges too).
+  const { applyDueMerges } = await import("./registration");
+  await applyDueMerges(activityId, occurrenceId);
 }
 
 /** Delete an upcoming event; weekly activities are topped up afterward. */

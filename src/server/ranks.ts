@@ -4,7 +4,7 @@ import { activities, memberships, ranks } from "@/lib/db/schema";
 import { parseWeeklyTime } from "@/lib/datetime";
 import { getActivityAccess } from "./permissions";
 
-export type RankMergeMode = "manual" | "scheduled";
+export type RankMergeMode = "from_open" | "manual" | "scheduled";
 
 export type RankRow = {
   id: string;
@@ -19,6 +19,12 @@ export type RankRow = {
   createdAt: Date;
 };
 
+function normalizeMergeMode(raw: string | null | undefined): RankMergeMode {
+  if (raw === "scheduled") return "scheduled";
+  if (raw === "manual") return "manual";
+  return "from_open";
+}
+
 function mapRank(row: typeof ranks.$inferSelect): RankRow {
   return {
     id: row.id,
@@ -26,7 +32,7 @@ function mapRank(row: typeof ranks.$inferSelect): RankRow {
     name: row.name,
     sortPriority: row.sortPriority,
     isDefault: row.isDefault,
-    mergeMode: row.mergeMode === "scheduled" ? "scheduled" : "manual",
+    mergeMode: normalizeMergeMode(row.mergeMode),
     mergeAt: row.mergeAt ?? null,
     mergeWeekday:
       typeof row.mergeWeekday === "number" &&
@@ -71,20 +77,16 @@ function normalizeMergePatch(
 
   const nextMode =
     input.mergeMode !== undefined
-      ? input.mergeMode === "scheduled"
-        ? "scheduled"
-        : "manual"
+      ? normalizeMergeMode(input.mergeMode)
       : existing
-        ? existing.mergeMode === "scheduled"
-          ? "scheduled"
-          : "manual"
-        : "manual";
+        ? normalizeMergeMode(existing.mergeMode)
+        : "from_open";
 
   if (input.mergeMode !== undefined) {
     patch.mergeMode = nextMode;
   }
 
-  if (nextMode === "manual") {
+  if (nextMode !== "scheduled") {
     if (input.mergeMode !== undefined || input.mergeAt !== undefined) {
       patch.mergeAt = null;
     }
@@ -131,7 +133,7 @@ export async function createRank(
     throw new Error("Only the owner can create ranks");
   }
   const name = (input.name ?? "New rank").trim() || "New rank";
-  const mergeMode = input.mergeMode === "scheduled" ? "scheduled" : "manual";
+  const mergeMode = normalizeMergeMode(input.mergeMode ?? "manual");
 
   const db = requireDb();
   const existing = await listRanks(activityId);

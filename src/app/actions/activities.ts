@@ -452,8 +452,13 @@ export async function updateRankAction(
 ): Promise<ActionResult> {
   const user = await requireSessionUser();
   const name = String(formData.get("name") ?? "");
-  const mergeModeRaw = String(formData.get("mergeMode") ?? "manual");
-  const mergeMode = mergeModeRaw === "scheduled" ? "scheduled" : "manual";
+  const mergeModeRaw = String(formData.get("mergeMode") ?? "from_open");
+  const mergeMode =
+    mergeModeRaw === "scheduled"
+      ? ("scheduled" as const)
+      : mergeModeRaw === "manual"
+        ? ("manual" as const)
+        : ("from_open" as const);
   const mergeAtRaw = String(formData.get("mergeAt") ?? "").trim();
   const mergeWeekdayRaw = String(formData.get("mergeWeekday") ?? "").trim();
   const mergeTimeRaw = String(formData.get("mergeTime") ?? "").trim();
@@ -516,6 +521,7 @@ export async function openRegistrationForOccurrenceAction(
   try {
     await openRegistrationForOccurrence(activityId, user.id, occurrenceId);
     revalidatePath(`/activities/${activityId}`);
+    revalidatePath(`/activities/${activityId}/events/${occurrenceId}`);
     return { ok: true, message: "Registration opened." };
   } catch (err) {
     return {

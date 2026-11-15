@@ -201,3 +201,42 @@ export function minDateTimeLocal(
 ): string {
   return formatDateTimeLocal(new Date(now.getTime() + 60_000), timeZone);
 }
+
+/**
+ * Latest weekday + HH:mm instant in `timeZone` that is strictly before `before`.
+ * Used for weekly registration-open and rank-merge times relative to an occurrence.
+ */
+export function previousWeeklyInstant(
+  weekday: number,
+  timeHHmm: string,
+  timeZone: string,
+  before: Date,
+): Date {
+  if (weekday < 0 || weekday > 6) {
+    throw new Error("Weekday must be 0 (Sun) through 6 (Sat)");
+  }
+  const { hour, minute } = parseWeeklyTime(timeHHmm);
+  const hh = String(hour).padStart(2, "0");
+  const mm = String(minute).padStart(2, "0");
+  const anchor = zonedParts(before, timeZone);
+
+  for (let dayOffset = 0; dayOffset <= 14; dayOffset++) {
+    const cal = addCalendarDays(
+      anchor.year,
+      anchor.month,
+      anchor.day,
+      -dayOffset,
+    );
+    const y = String(cal.year).padStart(4, "0");
+    const m = String(cal.month).padStart(2, "0");
+    const d = String(cal.day).padStart(2, "0");
+    const noon = parseDateTimeLocal(`${y}-${m}-${d}T12:00`, timeZone);
+    if (zonedParts(noon, timeZone).weekday !== weekday) continue;
+    const instant = parseDateTimeLocal(`${y}-${m}-${d}T${hh}:${mm}`, timeZone);
+    if (instant.getTime() < before.getTime()) {
+      return instant;
+    }
+  }
+
+  throw new Error("Could not resolve weekly instant before event");
+}
