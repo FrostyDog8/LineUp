@@ -8,12 +8,16 @@ import * as schema from "./schema";
  *
  * Singleton on globalThis avoids exhausting Supabase pooler connections
  * under Next.js hot reload (common source of opaque "Failed query" errors).
+ *
+ * Pool is intentionally small (not max:1): a single wedged socket must not
+ * block all auth. Timeouts + dispose-on-fatal recreate hung clients.
  */
 type SqlClient = ReturnType<typeof postgres>;
+type DrizzleDb = ReturnType<typeof createDrizzle>;
 
 const globalForDb = globalThis as unknown as {
   lineupSql?: SqlClient;
-  lineupDb?: ReturnType<typeof createDrizzle>;
+  lineupDb?: DrizzleDb;
 };
 
 /** True when the URI still contains docs/template password markers. */
@@ -47,9 +51,21 @@ function createSql(url: string): SqlClient {
   const isSupabase = /supabase\.(co|com)/i.test(url);
   return postgres(url, {
     prepare: false, // required for Supabase transaction pooler (6543)
-    max: 1,
+    max: 8,
+    // Supavisor transaction mode can hang pipelined queries; keep pipeline at 1.
+    max_pipeline: 1,
     idle_timeout: 20,
-    connect_timeout: 30,
+    connect_timeout: 10,
+    // Backstop when the pooler/server goes silent (default TCP can hang for minutes).
+    query_timeout: 15,
+    queue_timeout: 10,
+    cancel_timeout: 5,
+    max_lifetime: 60 * 30,
+    keep_alive: 30,
+    connection: {
+      // Server-enforced limit while a statement is running (ms).
+      statement_timeout: 15_000,
+    },
     ...(isSupabase ? { ssl: "require" as const } : {}),
   });
 }
@@ -58,32 +74,84 @@ function createDrizzle(sql: SqlClient) {
   return drizzle(sql, { schema });
 }
 
-function createDb() {
+/** Drop the singleton so the next requireDb() opens a fresh pool. */
+export function resetDbClient(): void {
+  const sql = globalForDb.lineupSql;
+  globalForDb.lineupSql = undefined;
+  globalForDb.lineupDb = undefined;
+  if (sql) {
+    void sql.end({ timeout: 2 }).catch(() => {
+      // Ignore close races; next createSql() opens a new pool.
+    });
+  }
+}
+
+function isFatalDbError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const code =
+    "code" in err && typeof (err as { code?: unknown }).code === "string"
+      ? (err as { code: string }).code
+      : "";
+  const message = err.message.toLowerCase();
+  const causeMessage =
+    err.cause instanceof Error ? err.cause.message.toLowerCase() : "";
+
+  return (
+    code === "CONNECTION_ENDED" ||
+    code === "CONNECTION_DESTROYED" ||
+    code === "CONNECT_TIMEOUT" ||
+    code === "CONNECTION_CLOSED" ||
+    code === "CONNECT_FAILED" ||
+    (code === "QUERY_TIMEOUT" && causeMessage.includes("cancel_unanswered")) ||
+    message.includes("connection_ended") ||
+    message.includes("connection_destroyed") ||
+    message.includes("connect_timeout") ||
+    message.includes("connection terminated") ||
+    message.includes("server closed the connection")
+  );
+}
+
+function getOrCreateDb(): DrizzleDb | null {
   const url = process.env.DATABASE_URL?.trim();
   if (!url || isPlaceholderUrl(url)) {
     return null;
   }
 
-  const sql = globalForDb.lineupSql ?? createSql(url);
-  if (process.env.NODE_ENV !== "production") {
-    globalForDb.lineupSql = sql;
+  if (globalForDb.lineupDb && globalForDb.lineupSql) {
+    return globalForDb.lineupDb;
   }
 
-  return createDrizzle(sql);
+  const sql = createSql(url);
+  const drizzleDb = createDrizzle(sql);
+  globalForDb.lineupSql = sql;
+  globalForDb.lineupDb = drizzleDb;
+  return drizzleDb;
 }
 
-export const db = globalForDb.lineupDb ?? createDb();
-if (process.env.NODE_ENV !== "production" && db) {
-  globalForDb.lineupDb = db;
-}
+/** Prefer requireDb() so a disposed pool can be recreated. */
+export const db = getOrCreateDb();
 
-export type Db = NonNullable<typeof db>;
+export type Db = NonNullable<ReturnType<typeof getOrCreateDb>>;
 
 export function requireDb(): Db {
-  if (!db) {
+  const instance = getOrCreateDb();
+  if (!instance) {
     throw new Error(databaseUrlConfigError(process.env.DATABASE_URL));
   }
-  return db;
+  return instance;
+}
+
+/**
+ * Run a DB callback; on a fatal connection error, dispose the pool and retry once.
+ */
+export async function withDb<T>(fn: (db: Db) => Promise<T>): Promise<T> {
+  try {
+    return await fn(requireDb());
+  } catch (err) {
+    if (!isFatalDbError(err)) throw err;
+    resetDbClient();
+    return await fn(requireDb());
+  }
 }
 
 /** Unwrap drizzle/postgres errors into something actionable in the UI. */
@@ -102,6 +170,23 @@ export function formatDbError(err: unknown): string {
 
   const detail = cause?.message || err.message;
   const lower = detail.toLowerCase();
+  const code =
+    "code" in err && typeof (err as { code?: unknown }).code === "string"
+      ? (err as { code: string }).code
+      : "";
+
+  if (
+    code === "QUERY_TIMEOUT" ||
+    code === "QUEUE_TIMEOUT" ||
+    code === "CONNECT_TIMEOUT" ||
+    lower.includes("query_timeout") ||
+    lower.includes("queue_timeout") ||
+    lower.includes("connect_timeout") ||
+    lower.includes("statement timeout") ||
+    lower.includes("canceling statement")
+  ) {
+    return `Database timed out (${detail}). The connection was reset — try again. If this keeps happening, restart \`npm run dev\` and check DATABASE_URL / Supabase pooler health.`;
+  }
 
   if (
     lower.includes("password authentication failed") ||
