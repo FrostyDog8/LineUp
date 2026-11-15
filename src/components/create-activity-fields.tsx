@@ -4,11 +4,12 @@ import { useState } from "react";
 import { SegmentedToggle } from "@/components/segmented-toggle";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { WEEKDAY_OPTIONS } from "@/lib/schedule-defaults";
 
 export function CreateActivityFields() {
-  const [scheduleMode, setScheduleMode] = useState<
-    "one_time" | "recurring_simple"
-  >("one_time");
+  const [scheduleMode, setScheduleMode] = useState<"weekly" | "custom">(
+    "weekly",
+  );
 
   return (
     <>
@@ -28,8 +29,8 @@ export function CreateActivityFields() {
           <input type="hidden" name="scheduleMode" value={scheduleMode} />
           {(
             [
-              { value: "one_time" as const, label: "One-time" },
-              { value: "recurring_simple" as const, label: "Recurring" },
+              { value: "weekly" as const, label: "Weekly" },
+              { value: "custom" as const, label: "Custom" },
             ] as const
           ).map((opt) => {
             const selected = scheduleMode === opt.value;
@@ -51,26 +52,144 @@ export function CreateActivityFields() {
           })}
         </div>
         <p className="text-xs text-muted-foreground">
-          {scheduleMode === "one_time"
-            ? "Creates one event so people can register later."
-            : "Starts with an empty events list — add events after create."}
+          {scheduleMode === "weekly"
+            ? "Fills the next 5 future events from your weekly pattern. Each event can override defaults later."
+            : "Starts with an empty events list. Add one or more future events after create (covers one-offs too)."}
         </p>
       </div>
 
-      {scheduleMode === "one_time" ? (
-        <div className="space-y-2">
-          <Label htmlFor="startsAt">Starts at</Label>
-          <Input
-            id="startsAt"
-            name="startsAt"
-            type="datetime-local"
-            required
-          />
+      {scheduleMode === "weekly" ? (
+        <div className="space-y-4 rounded-lg border border-border p-3">
+          <div className="space-y-2">
+            <Label htmlFor="weeklyWeekday">Day of week</Label>
+            <select
+              id="weeklyWeekday"
+              name="weeklyWeekday"
+              required
+              defaultValue="3"
+              className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
+            >
+              {WEEKDAY_OPTIONS.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="weeklyTime">Time</Label>
+            <Input
+              id="weeklyTime"
+              name="weeklyTime"
+              type="time"
+              defaultValue="19:00"
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              Timezone Asia/Jerusalem (server default).
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="defaultPlace">Place</Label>
+            <Input
+              id="defaultPlace"
+              name="defaultPlace"
+              placeholder="Central park courts"
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="registrationOpensHoursBefore">
+                Registration opens
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="registrationOpensHoursBefore"
+                  name="registrationOpensHoursBefore"
+                  type="number"
+                  min={0}
+                  defaultValue={48}
+                  required
+                />
+                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                  hours before
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="defaultRankMergeHoursBefore">
+                Rank merge default
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="defaultRankMergeHoursBefore"
+                  name="defaultRankMergeHoursBefore"
+                  type="number"
+                  min={0}
+                  defaultValue={24}
+                  required
+                />
+                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                  hours before
+                </span>
+              </div>
+            </div>
+          </div>
           <p className="text-xs text-muted-foreground">
-            Timezone Asia/Jerusalem (server default).
+            These are activity defaults. Individual events can override place and
+            capacity; registration timing hooks apply in a later milestone.
           </p>
         </div>
-      ) : null}
+      ) : (
+        <div className="space-y-4 rounded-lg border border-border p-3">
+          <div className="space-y-2">
+            <Label htmlFor="defaultPlace">Default place</Label>
+            <Input
+              id="defaultPlace"
+              name="defaultPlace"
+              placeholder="Optional venue"
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="registrationOpensHoursBefore">
+                Registration opens
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="registrationOpensHoursBefore"
+                  name="registrationOpensHoursBefore"
+                  type="number"
+                  min={0}
+                  defaultValue={48}
+                  required
+                />
+                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                  hours before
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="defaultRankMergeHoursBefore">
+                Rank merge default
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="defaultRankMergeHoursBefore"
+                  name="defaultRankMergeHoursBefore"
+                  type="number"
+                  min={0}
+                  defaultValue={24}
+                  required
+                />
+                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                  hours before
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="defaultCapacity">Default capacity</Label>

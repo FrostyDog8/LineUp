@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getSessionUser } from "@/lib/auth";
+import { WEEKDAY_OPTIONS, weekdayLabel } from "@/lib/schedule-defaults";
 import { getActivityById } from "@/server/activities";
 import { listMembers } from "@/server/memberships";
 import { getActivityAccess } from "@/server/permissions";
@@ -92,6 +93,86 @@ export default async function ActivitySettingsPage({ params }: Props) {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="defaultPlace">Default place</Label>
+                <Input
+                  id="defaultPlace"
+                  name="defaultPlace"
+                  defaultValue={activity.defaultPlace ?? ""}
+                  placeholder="Venue or location"
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="registrationOpensHoursBefore">
+                    Registration opens
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="registrationOpensHoursBefore"
+                      name="registrationOpensHoursBefore"
+                      type="number"
+                      min={0}
+                      defaultValue={
+                        activity.scheduleDefaults.registrationOpensHoursBefore
+                      }
+                      required
+                    />
+                    <span className="whitespace-nowrap text-xs text-muted-foreground">
+                      hours before
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="defaultRankMergeHoursBefore">
+                    Rank merge default
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="defaultRankMergeHoursBefore"
+                      name="defaultRankMergeHoursBefore"
+                      type="number"
+                      min={0}
+                      defaultValue={
+                        activity.scheduleDefaults.defaultRankMergeHoursBefore
+                      }
+                      required
+                    />
+                    <span className="whitespace-nowrap text-xs text-muted-foreground">
+                      hours before
+                    </span>
+                  </div>
+                </div>
+              </div>
+              {activity.scheduleMode === "weekly" ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="weeklyWeekday">Weekly day</Label>
+                    <select
+                      id="weeklyWeekday"
+                      name="weeklyWeekday"
+                      defaultValue={activity.weeklyWeekday ?? 3}
+                      className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
+                    >
+                      {WEEKDAY_OPTIONS.map((d) => (
+                        <option key={d.value} value={d.value}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="weeklyTime">Weekly time</Label>
+                    <Input
+                      id="weeklyTime"
+                      name="weeklyTime"
+                      type="time"
+                      defaultValue={activity.weeklyTime ?? "19:00"}
+                      required
+                    />
+                  </div>
+                </div>
+              ) : null}
+              <div className="space-y-2">
                 <Label>Join mode</Label>
                 <SegmentedToggle
                   name="joinMode"
@@ -120,9 +201,9 @@ export default async function ActivitySettingsPage({ params }: Props) {
               </div>
               <p className="text-xs text-muted-foreground">
                 Schedule:{" "}
-                {activity.scheduleMode === "one_time"
-                  ? "one-time"
-                  : "recurring"}
+                {activity.scheduleMode === "weekly"
+                  ? `weekly · ${weekdayLabel(activity.weeklyWeekday)}${activity.weeklyTime ? ` ${activity.weeklyTime}` : ""}`
+                  : "custom"}
                 . Timezone {activity.timezone} (server default; not editable
                 here yet).
               </p>
@@ -170,14 +251,24 @@ export default async function ActivitySettingsPage({ params }: Props) {
                       Save
                     </FormSubmitButton>
                   </form>
-                  <form
-                    action={deleteRankAction.bind(null, id, rank.id)}
-                    className="mt-2"
-                  >
-                    <FormSubmitButton size="sm" variant="ghost" pendingLabel="…">
-                      Delete{rank.isDefault ? " (default)" : ""}
-                    </FormSubmitButton>
-                  </form>
+                  {ranks.length <= 1 ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Cannot delete the only remaining rank.
+                    </p>
+                  ) : (
+                    <ActionForm
+                      action={deleteRankAction.bind(null, id, rank.id)}
+                      className="mt-2"
+                    >
+                      <FormSubmitButton
+                        size="sm"
+                        variant="ghost"
+                        pendingLabel="…"
+                      >
+                        Delete{rank.isDefault ? " (default)" : ""}
+                      </FormSubmitButton>
+                    </ActionForm>
+                  )}
                 </li>
               ))}
             </ul>

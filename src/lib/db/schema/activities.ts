@@ -9,8 +9,8 @@ import {
 import { users } from "./users";
 
 export const scheduleModeEnum = pgEnum("schedule_mode", [
-  "one_time",
-  "recurring_simple",
+  "weekly",
+  "custom",
 ]);
 
 export const joinModeEnum = pgEnum("join_mode", ["must_approve", "open"]);
@@ -22,6 +22,25 @@ export const proxyConfirmScopeEnum = pgEnum("proxy_confirm_scope", [
   "both",
 ]);
 
+/**
+ * Activity-level schedule / registration timing defaults (JSON).
+ * Per-event overrides live on occurrences later; ranks can override merge timing by id.
+ */
+export type ScheduleDefaultsJson = {
+  /** Hours before start when registration opens (activity default). */
+  registrationOpensHoursBefore: number;
+  /** Hours before start when ranks merge into the main list (fallback). */
+  defaultRankMergeHoursBefore: number;
+  /** Optional per-rank merge timing: rankId -> hours before start. */
+  rankMergeHoursBeforeByRankId?: Record<string, number>;
+};
+
+export const DEFAULT_SCHEDULE_DEFAULTS: ScheduleDefaultsJson = {
+  registrationOpensHoursBefore: 48,
+  defaultRankMergeHoursBefore: 24,
+  rankMergeHoursBeforeByRankId: {},
+};
+
 export const activities = pgTable("activities", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
@@ -29,7 +48,17 @@ export const activities = pgTable("activities", {
   timezone: text("timezone").notNull().default("Asia/Jerusalem"),
   scheduleMode: scheduleModeEnum("schedule_mode")
     .notNull()
-    .default("one_time"),
+    .default("custom"),
+  /** 0=Sunday … 6=Saturday (JS getDay). Used when scheduleMode is weekly. */
+  weeklyWeekday: integer("weekly_weekday"),
+  /** Wall-clock time `HH:mm` in the activity timezone. */
+  weeklyTime: text("weekly_time"),
+  /** Default venue / place text; occurrences may override. */
+  defaultPlace: text("default_place"),
+  /** JSON string of ScheduleDefaultsJson. */
+  scheduleDefaultsJson: text("schedule_defaults_json")
+    .notNull()
+    .default("{}"),
   joinMode: joinModeEnum("join_mode").notNull().default("must_approve"),
   defaultCapacity: integer("default_capacity").notNull().default(18),
   defaultRankId: uuid("default_rank_id"),

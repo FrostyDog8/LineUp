@@ -1,17 +1,27 @@
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { generateInviteSlug } from "@/lib/invite";
+import { assertFutureStart, nextWeeklyStarts, parseWeeklyTime } from "@/lib/datetime";
+import {
+  parseScheduleDefaults,
+  stringifyScheduleDefaults,
+} from "@/lib/schedule-defaults";
 import { requireDb } from "@/lib/db";
 import {
   activities,
+  DEFAULT_SCHEDULE_DEFAULTS,
   managerPermissions,
   memberships,
   occurrences,
   ranks,
+  type ScheduleDefaultsJson,
 } from "@/lib/db/schema";
 import { getActivityAccess } from "./permissions";
 
 const DEFAULT_TIMEZONE = "Asia/Jerusalem";
 const DEFAULT_RANK_NAME = "member";
+const WEEKLY_WINDOW = 5;
+
+export type ScheduleMode = "weekly" | "custom";
 
 export type ActivitySummary = {
   id: string;
@@ -20,7 +30,7 @@ export type ActivitySummary = {
   role: "owner" | "manager" | "participant";
   timezone: string;
   joinMode: "must_approve" | "open";
-  scheduleMode: "one_time" | "recurring_simple";
+  scheduleMode: ScheduleMode;
   status: "requested" | "active" | "left" | "removed";
 };
 
@@ -28,9 +38,13 @@ export type CreateActivityInput = {
   name: string;
   defaultCapacity: number;
   joinMode: "must_approve" | "open";
-  scheduleMode: "one_time" | "recurring_simple";
-  /** Required when scheduleMode is one_time. */
-  startsAt?: Date;
+  scheduleMode: ScheduleMode;
+  /** Required when scheduleMode is weekly. 0=Sun … 6=Sat. */
+  weeklyWeekday?: number;
+  /** Required when scheduleMode is weekly. `HH:mm`. */
+  weeklyTime?: string;
+  defaultPlace?: string | null;
+  scheduleDefaults?: Partial<ScheduleDefaultsJson>;
   /** Server default Asia/Jerusalem when omitted. */
   timezone?: string;
   typeText?: string;
@@ -48,8 +62,32 @@ export type ActivityDetail = {
   inviteSlug: string;
   ownerUserId: string;
   proxyConfirmScope: "off" | "managers" | "members" | "both";
-  scheduleMode: "one_time" | "recurring_simple";
+  scheduleMode: ScheduleMode;
+  weeklyWeekday: number | null;
+  weeklyTime: string | null;
+  defaultPlace: string | null;
+  scheduleDefaults: ScheduleDefaultsJson;
 };
+
+function mapActivityRow(row: typeof activities.$inferSelect): ActivityDetail {
+  return {
+    id: row.id,
+    name: row.name,
+    typeText: row.typeText,
+    timezone: row.timezone,
+    joinMode: row.joinMode,
+    defaultCapacity: row.defaultCapacity,
+    defaultRankId: row.defaultRankId,
+    inviteSlug: row.inviteSlug,
+    ownerUserId: row.ownerUserId,
+    proxyConfirmScope: row.proxyConfirmScope,
+    scheduleMode: row.scheduleMode,
+    weeklyWeekday: row.weeklyWeekday,
+    weeklyTime: row.weeklyTime,
+    defaultPlace: row.defaultPlace,
+    scheduleDefaults: parseScheduleDefaults(row.scheduleDefaultsJson),
+  };
+}
 
 export async function listMyActivities(
   userId: string,
@@ -87,19 +125,7 @@ export async function getActivityById(
     where: eq(activities.id, activityId),
   });
   if (!row) return null;
-  return {
-    id: row.id,
-    name: row.name,
-    typeText: row.typeText,
-    timezone: row.timezone,
-    joinMode: row.joinMode,
-    defaultCapacity: row.defaultCapacity,
-    defaultRankId: row.defaultRankId,
-    inviteSlug: row.inviteSlug,
-    ownerUserId: row.ownerUserId,
-    proxyConfirmScope: row.proxyConfirmScope,
-    scheduleMode: row.scheduleMode,
-  };
+  return mapActivityRow(row);
 }
 
 export async function getActivityByInviteSlug(
@@ -113,6 +139,24 @@ export async function getActivityByInviteSlug(
   return getActivityById(row.id);
 }
 
+function resolveScheduleDefaults(
+  partial?: Partial<ScheduleDefaultsJson>,
+): ScheduleDefaultsJson {
+  return {
+    registrationOpensHoursBefore:
+      typeof partial?.registrationOpensHoursBefore === "number" &&
+      partial.registrationOpensHoursBefore >= 0
+        ? partial.registrationOpensHoursBefore
+        : DEFAULT_SCHEDULE_DEFAULTS.registrationOpensHoursBefore,
+    defaultRankMergeHoursBefore:
+      typeof partial?.defaultRankMergeHoursBefore === "number" &&
+      partial.defaultRankMergeHoursBefore >= 0
+        ? partial.defaultRankMergeHoursBefore
+        : DEFAULT_SCHEDULE_DEFAULTS.defaultRankMergeHoursBefore,
+    rankMergeHoursBeforeByRankId: partial?.rankMergeHoursBeforeByRankId ?? {},
+  };
+}
+
 export async function createActivity(
   userId: string,
   input: CreateActivityInput,
@@ -123,8 +167,26 @@ export async function createActivity(
   if (input.defaultCapacity < 1) {
     throw new Error("Default capacity must be at least 1");
   }
-  if (input.scheduleMode === "one_time" && !input.startsAt) {
-    throw new Error("One-time activities need a start time");
+
+  const scheduleDefaults = resolveScheduleDefaults(input.scheduleDefaults);
+  const defaultPlace = input.defaultPlace?.trim() || null;
+  let weeklyWeekday: number | null = null;
+  let weeklyTime: string | null = null;
+
+  if (input.scheduleMode === "weekly") {
+    if (
+      input.weeklyWeekday == null ||
+      input.weeklyWeekday < 0 ||
+      input.weeklyWeekday > 6
+    ) {
+      throw new Error("Pick a day of the week");
+    }
+    if (!input.weeklyTime?.trim()) {
+      throw new Error("Pick a weekly time");
+    }
+    parseWeeklyTime(input.weeklyTime);
+    weeklyWeekday = input.weeklyWeekday;
+    weeklyTime = input.weeklyTime.trim();
   }
 
   const inviteSlug = generateInviteSlug();
@@ -142,6 +204,10 @@ export async function createActivity(
         typeText,
         timezone,
         scheduleMode: input.scheduleMode,
+        weeklyWeekday,
+        weeklyTime,
+        defaultPlace,
+        scheduleDefaultsJson: stringifyScheduleDefaults(scheduleDefaults),
         joinMode: input.joinMode,
         defaultCapacity: input.defaultCapacity,
         ownerUserId: userId,
@@ -181,14 +247,28 @@ export async function createActivity(
       status: "active",
     });
 
-    // One-time: materialize a single occurrence so registration can attach later.
-    // Recurring: leave the events list empty until the owner adds events.
-    if (input.scheduleMode === "one_time" && input.startsAt) {
-      await tx.insert(occurrences).values({
-        activityId: activity.id,
-        startsAt: input.startsAt,
-        capacity: null,
-      });
+    // Weekly: auto-fill the next 5 future events from the pattern.
+    // Custom: leave the events list empty (one-offs = add a single future event).
+    if (
+      input.scheduleMode === "weekly" &&
+      weeklyWeekday != null &&
+      weeklyTime
+    ) {
+      const starts = nextWeeklyStarts(
+        weeklyWeekday,
+        weeklyTime,
+        timezone,
+        WEEKLY_WINDOW,
+      );
+      for (const startsAt of starts) {
+        assertFutureStart(startsAt);
+        await tx.insert(occurrences).values({
+          activityId: activity.id,
+          startsAt,
+          capacity: null,
+          place: null,
+        });
+      }
     }
 
     return {
@@ -197,19 +277,7 @@ export async function createActivity(
     };
   });
 
-  return {
-    id: created.id,
-    name: created.name,
-    typeText: created.typeText,
-    timezone: created.timezone,
-    joinMode: created.joinMode,
-    defaultCapacity: created.defaultCapacity,
-    defaultRankId: created.defaultRankId,
-    inviteSlug: created.inviteSlug,
-    ownerUserId: created.ownerUserId,
-    proxyConfirmScope: created.proxyConfirmScope,
-    scheduleMode: created.scheduleMode,
-  };
+  return mapActivityRow(created);
 }
 
 export type UpdateActivitySettingsInput = {
@@ -217,6 +285,10 @@ export type UpdateActivitySettingsInput = {
   defaultCapacity?: number;
   defaultRankId?: string | null;
   name?: string;
+  defaultPlace?: string | null;
+  scheduleDefaults?: Partial<ScheduleDefaultsJson>;
+  weeklyWeekday?: number | null;
+  weeklyTime?: string | null;
 };
 
 export async function updateActivitySettings(
@@ -230,6 +302,9 @@ export async function updateActivitySettings(
   }
 
   const db = requireDb();
+  const existing = await getActivityById(activityId);
+  if (!existing) throw new Error("Activity not found");
+
   const patch: Partial<typeof activities.$inferInsert> = {
     updatedAt: new Date(),
   };
@@ -256,6 +331,34 @@ export async function updateActivitySettings(
     const name = input.name.trim();
     if (!name) throw new Error("Activity name is required");
     patch.name = name;
+  }
+  if (input.defaultPlace !== undefined) {
+    patch.defaultPlace = input.defaultPlace?.trim() || null;
+  }
+  if (input.scheduleDefaults !== undefined) {
+    patch.scheduleDefaultsJson = stringifyScheduleDefaults(
+      resolveScheduleDefaults({
+        ...existing.scheduleDefaults,
+        ...input.scheduleDefaults,
+      }),
+    );
+  }
+  if (input.weeklyWeekday !== undefined) {
+    if (
+      input.weeklyWeekday != null &&
+      (input.weeklyWeekday < 0 || input.weeklyWeekday > 6)
+    ) {
+      throw new Error("Invalid weekday");
+    }
+    patch.weeklyWeekday = input.weeklyWeekday;
+  }
+  if (input.weeklyTime !== undefined) {
+    if (input.weeklyTime) {
+      parseWeeklyTime(input.weeklyTime);
+      patch.weeklyTime = input.weeklyTime.trim();
+    } else {
+      patch.weeklyTime = null;
+    }
   }
 
   await db.update(activities).set(patch).where(eq(activities.id, activityId));

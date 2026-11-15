@@ -48,7 +48,7 @@ export function ActivityList({ activities }: { activities: ActivitySummary[] }) 
             <CardHeader>
               <CardTitle>{activity.name}</CardTitle>
               <CardDescription>
-                {activity.scheduleMode === "one_time" ? "one-time" : "recurring"}{" "}
+                {activity.scheduleMode === "weekly" ? "weekly" : "custom"}{" "}
                 · {activity.role}
                 {activity.status === "requested" ? " · pending" : ""} ·{" "}
                 {activity.joinMode === "open" ? "open" : "approval"}

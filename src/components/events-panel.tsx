@@ -10,13 +10,18 @@ import { ActionForm } from "@/components/action-form";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatDateTimeLocal, formatEventWhen } from "@/lib/datetime";
+import {
+  formatDateTimeLocal,
+  formatEventWhen,
+  minDateTimeLocal,
+} from "@/lib/datetime";
 
 /** Serializable event row for the client (Dates cross the RSC boundary as ISO strings). */
 export type EventListItem = {
   id: string;
   startsAt: string;
   capacity: number | null;
+  place: string | null;
   status: string;
   notes: string | null;
 };
@@ -25,7 +30,8 @@ type Props = {
   activityId: string;
   timezone: string;
   defaultCapacity: number;
-  scheduleMode: "one_time" | "recurring_simple";
+  defaultPlace: string | null;
+  scheduleMode: "weekly" | "custom";
   canEdit: boolean;
   events: EventListItem[];
 };
@@ -34,14 +40,14 @@ export function EventsPanel({
   activityId,
   timezone,
   defaultCapacity,
+  defaultPlace,
   scheduleMode,
   canEdit,
   events,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
-  const canAdd =
-    canEdit &&
-    (scheduleMode === "recurring_simple" || events.length === 0);
+  const canAdd = canEdit;
+  const minStart = minDateTimeLocal(timezone);
 
   const boundCreate = createOccurrenceAction.bind(null, activityId);
 
@@ -49,16 +55,18 @@ export function EventsPanel({
     <div className="space-y-6">
       {events.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {scheduleMode === "recurring_simple"
-            ? "No events yet. Add the first occurrence when you are ready."
-            : "No event yet."}
+          {scheduleMode === "weekly"
+            ? "No upcoming events yet. The weekly pattern will refill this list."
+            : "No events yet. Add a future event when you are ready."}
         </p>
       ) : (
         <ul className="space-y-3">
           {events.map((event) => {
             const startsAt = new Date(event.startsAt);
             const effectiveCapacity = event.capacity ?? defaultCapacity;
+            const effectivePlace = event.place ?? defaultPlace;
             const isEditing = editingId === event.id;
+            const isPast = startsAt.getTime() <= Date.now();
             const boundUpdate = updateOccurrenceAction.bind(
               null,
               activityId,
@@ -75,16 +83,26 @@ export function EventsPanel({
                     <div>
                       <p className="font-medium">
                         {formatEventWhen(startsAt, timezone)}
+                        {isPast ? (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            (past)
+                          </span>
+                        ) : null}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Capacity {effectiveCapacity}
-                        {event.capacity == null ? " (activity default)" : " (override)"}
+                        {event.capacity == null
+                          ? " (activity default)"
+                          : " (override)"}
+                        {effectivePlace
+                          ? ` · ${effectivePlace}${event.place == null ? " (default)" : ""}`
+                          : ""}
                         {" · "}
                         {event.status}
                         {event.notes ? ` · ${event.notes}` : ""}
                       </p>
                     </div>
-                    {canEdit ? (
+                    {canEdit && !isPast ? (
                       <button
                         type="button"
                         className="text-sm text-muted-foreground underline-offset-2 hover:underline"
@@ -110,8 +128,25 @@ export function EventsPanel({
                         name="startsAt"
                         type="datetime-local"
                         defaultValue={formatDateTimeLocal(startsAt, timezone)}
+                        min={minStart}
                         required
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Must be in the future ({timezone}).
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`place-${event.id}`}>Place override</Label>
+                      <Input
+                        id={`place-${event.id}`}
+                        name="place"
+                        placeholder={defaultPlace ?? "Activity default"}
+                        defaultValue={event.place ?? ""}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Leave blank to use activity default
+                        {defaultPlace ? ` (${defaultPlace})` : ""}.
+                      </p>
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor={`capacity-${event.id}`}>
@@ -125,10 +160,6 @@ export function EventsPanel({
                         placeholder={`Default ${defaultCapacity}`}
                         defaultValue={event.capacity ?? ""}
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Leave blank to use activity default ({defaultCapacity}).
-                        Registration policy hooks later.
-                      </p>
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor={`notes-${event.id}`}>Notes</Label>
@@ -163,6 +194,8 @@ export function EventsPanel({
           action={boundCreate}
           timezone={timezone}
           defaultCapacity={defaultCapacity}
+          defaultPlace={defaultPlace}
+          minStart={minStart}
         />
       ) : null}
     </div>
@@ -173,6 +206,8 @@ function AddEventForm({
   action,
   timezone,
   defaultCapacity,
+  defaultPlace,
+  minStart,
 }: {
   action: (
     prev: ActionResult | null,
@@ -180,14 +215,39 @@ function AddEventForm({
   ) => Promise<ActionResult>;
   timezone: string;
   defaultCapacity: number;
+  defaultPlace: string | null;
+  minStart: string;
 }) {
   return (
-    <ActionForm action={action} className="space-y-3 rounded-lg border border-dashed border-border p-3">
+    <ActionForm
+      action={action}
+      className="space-y-3 rounded-lg border border-dashed border-border p-3"
+    >
       <p className="text-sm font-medium">Add event</p>
       <div className="space-y-1">
         <Label htmlFor="new-startsAt">Starts at</Label>
-        <Input id="new-startsAt" name="startsAt" type="datetime-local" required />
-        <p className="text-xs text-muted-foreground">Timezone {timezone}.</p>
+        <Input
+          id="new-startsAt"
+          name="startsAt"
+          type="datetime-local"
+          min={minStart}
+          required
+        />
+        <p className="text-xs text-muted-foreground">
+          Must be in the future. Timezone {timezone}.
+        </p>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="new-place">Place</Label>
+        <Input
+          id="new-place"
+          name="place"
+          placeholder={
+            defaultPlace
+              ? `Default: ${defaultPlace}`
+              : "Uses activity default if blank"
+          }
+        />
       </div>
       <div className="space-y-1">
         <Label htmlFor="new-capacity">Capacity override</Label>

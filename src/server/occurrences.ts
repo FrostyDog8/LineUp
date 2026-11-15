@@ -1,14 +1,18 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, gt, ne } from "drizzle-orm";
+import { assertFutureStart, nextWeeklyStarts } from "@/lib/datetime";
 import { requireDb } from "@/lib/db";
 import { occurrences } from "@/lib/db/schema";
 import { getActivityAccess } from "./permissions";
 import { getActivityById } from "./activities";
+
+const WEEKLY_WINDOW = 5;
 
 export type OccurrenceRow = {
   id: string;
   activityId: string;
   startsAt: Date;
   capacity: number | null;
+  place: string | null;
   status: "scheduled" | "registration_open" | "closed" | "cancelled";
   notes: string | null;
 };
@@ -16,12 +20,14 @@ export type OccurrenceRow = {
 export type CreateOccurrenceInput = {
   startsAt: Date;
   capacity?: number | null;
+  place?: string | null;
   notes?: string | null;
 };
 
 export type UpdateOccurrenceInput = {
   startsAt?: Date;
   capacity?: number | null;
+  place?: string | null;
   notes?: string | null;
   status?: OccurrenceRow["status"];
 };
@@ -36,24 +42,29 @@ async function assertCanEditEvents(
   }
 }
 
+function mapOccurrence(row: typeof occurrences.$inferSelect): OccurrenceRow {
+  return {
+    id: row.id,
+    activityId: row.activityId,
+    startsAt: row.startsAt,
+    capacity: row.capacity,
+    place: row.place,
+    status: row.status,
+    notes: row.notes,
+  };
+}
+
 export async function listOccurrences(
   activityId: string,
 ): Promise<OccurrenceRow[]> {
   const db = requireDb();
   const rows = await db
-    .select({
-      id: occurrences.id,
-      activityId: occurrences.activityId,
-      startsAt: occurrences.startsAt,
-      capacity: occurrences.capacity,
-      status: occurrences.status,
-      notes: occurrences.notes,
-    })
+    .select()
     .from(occurrences)
     .where(eq(occurrences.activityId, activityId))
     .orderBy(asc(occurrences.startsAt));
 
-  return rows;
+  return rows.map(mapOccurrence);
 }
 
 export async function getOccurrence(
@@ -68,14 +79,71 @@ export async function getOccurrence(
     ),
   });
   if (!row) return null;
-  return {
-    id: row.id,
-    activityId: row.activityId,
-    startsAt: row.startsAt,
-    capacity: row.capacity,
-    status: row.status,
-    notes: row.notes,
-  };
+  return mapOccurrence(row);
+}
+
+/**
+ * Keep ~5 future weekly events. Call from activity page load / add-event path.
+ * Safe no-op for custom schedules or incomplete weekly config.
+ */
+export async function ensureWeeklyOccurrences(
+  activityId: string,
+): Promise<number> {
+  const activity = await getActivityById(activityId);
+  if (!activity) return 0;
+  if (activity.scheduleMode !== "weekly") return 0;
+  if (activity.weeklyWeekday == null || !activity.weeklyTime) return 0;
+
+  const db = requireDb();
+  const now = new Date();
+  const future = await db
+    .select()
+    .from(occurrences)
+    .where(
+      and(
+        eq(occurrences.activityId, activityId),
+        gt(occurrences.startsAt, now),
+        ne(occurrences.status, "cancelled"),
+      ),
+    )
+    .orderBy(asc(occurrences.startsAt));
+
+  const needed = WEEKLY_WINDOW - future.length;
+  if (needed <= 0) return 0;
+
+  const after =
+    future.length > 0
+      ? future[future.length - 1]!.startsAt
+      : now;
+
+  const existingTimes = new Set(
+    (await listOccurrences(activityId)).map((o) => o.startsAt.getTime()),
+  );
+
+  const candidates = nextWeeklyStarts(
+    activity.weeklyWeekday,
+    activity.weeklyTime,
+    activity.timezone,
+    needed + 2,
+    after,
+  );
+
+  let created = 0;
+  for (const startsAt of candidates) {
+    if (created >= needed) break;
+    if (startsAt.getTime() <= now.getTime()) continue;
+    if (existingTimes.has(startsAt.getTime())) continue;
+    await db.insert(occurrences).values({
+      activityId,
+      startsAt,
+      capacity: null,
+      place: null,
+    });
+    existingTimes.add(startsAt.getTime());
+    created += 1;
+  }
+
+  return created;
 }
 
 export async function createOccurrence(
@@ -88,12 +156,7 @@ export async function createOccurrence(
   const activity = await getActivityById(activityId);
   if (!activity) throw new Error("Activity not found");
 
-  if (activity.scheduleMode === "one_time") {
-    const existing = await listOccurrences(activityId);
-    if (existing.length > 0) {
-      throw new Error("One-time activities already have an event");
-    }
-  }
+  assertFutureStart(input.startsAt);
 
   if (input.capacity != null && input.capacity < 1) {
     throw new Error("Capacity must be at least 1");
@@ -106,20 +169,19 @@ export async function createOccurrence(
       activityId,
       startsAt: input.startsAt,
       capacity: input.capacity ?? null,
+      place: input.place?.trim() || null,
       notes: input.notes?.trim() || null,
     })
     .returning();
 
   if (!row) throw new Error("Failed to create event");
 
-  return {
-    id: row.id,
-    activityId: row.activityId,
-    startsAt: row.startsAt,
-    capacity: row.capacity,
-    status: row.status,
-    notes: row.notes,
-  };
+  // Keep the weekly window topped up after manual adds.
+  if (activity.scheduleMode === "weekly") {
+    await ensureWeeklyOccurrences(activityId);
+  }
+
+  return mapOccurrence(row);
 }
 
 export async function updateOccurrence(
@@ -133,6 +195,10 @@ export async function updateOccurrence(
   const existing = await getOccurrence(activityId, occurrenceId);
   if (!existing) throw new Error("Event not found");
 
+  if (input.startsAt !== undefined) {
+    assertFutureStart(input.startsAt);
+  }
+
   if (input.capacity != null && input.capacity < 1) {
     throw new Error("Capacity must be at least 1");
   }
@@ -142,6 +208,7 @@ export async function updateOccurrence(
   };
   if (input.startsAt !== undefined) patch.startsAt = input.startsAt;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
+  if (input.place !== undefined) patch.place = input.place?.trim() || null;
   if (input.notes !== undefined) patch.notes = input.notes?.trim() || null;
   if (input.status !== undefined) patch.status = input.status;
 
@@ -159,12 +226,5 @@ export async function updateOccurrence(
 
   if (!row) throw new Error("Failed to update event");
 
-  return {
-    id: row.id,
-    activityId: row.activityId,
-    startsAt: row.startsAt,
-    capacity: row.capacity,
-    status: row.status,
-    notes: row.notes,
-  };
+  return mapOccurrence(row);
 }

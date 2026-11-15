@@ -138,7 +138,7 @@ export async function deleteRank(
 
   const all = await listRanks(activityId);
   if (all.length <= 1) {
-    throw new Error("Keep at least one rank");
+    throw new Error("Cannot delete the only remaining rank on this activity");
   }
 
   const activity = await db.query.activities.findFirst({
