@@ -16,12 +16,31 @@ const globalForDb = globalThis as unknown as {
   lineupDb?: ReturnType<typeof createDrizzle>;
 };
 
+/** True when the URI still contains docs/template password markers. */
 function isPlaceholderUrl(url: string): boolean {
   return (
-    /REPLACE_ME|YOUR.PASSWORD|\[PASSWORD\]|\[PROJECT_REF\]/i.test(url) ||
+    /REPLACE_ME|YOUR[_-]?PASSWORD|\[YOUR[_-]?PASSWORD\]|\[PASSWORD\]|\[PROJECT_REF\]/i.test(
+      url,
+    ) ||
     url === "postgresql://" ||
     url.length < 20
   );
+}
+
+function databaseUrlConfigError(url: string | undefined): string {
+  const trimmed = url?.trim();
+  if (!trimmed) {
+    return "DATABASE_URL is not set. Copy .env.example to .env.local, paste the Supabase Postgres URI (Project Settings → Database), then restart `npm run dev`.";
+  }
+  if (
+    /YOUR[_-]?PASSWORD|\[YOUR[_-]?PASSWORD\]|YOUR\.PASSWORD/i.test(trimmed)
+  ) {
+    return "DATABASE_URL password looks like a template (YOUR-PASSWORD / [YOUR-PASSWORD]). Replace it with your real Supabase database password in .env.local, then restart `npm run dev`.";
+  }
+  if (/REPLACE_ME|\[PASSWORD\]|\[PROJECT_REF\]/i.test(trimmed)) {
+    return "DATABASE_URL still contains a placeholder (REPLACE_ME / [PASSWORD] / [PROJECT_REF]). Paste the real pooled Supabase URI into .env.local, then restart `npm run dev`.";
+  }
+  return "DATABASE_URL is not set or still a placeholder. Copy .env.example to .env.local and paste the Supabase Postgres URI (Project Settings → Database), then restart `npm run dev`.";
 }
 
 function createSql(url: string): SqlClient {
@@ -62,9 +81,7 @@ export type Db = NonNullable<typeof db>;
 
 export function requireDb(): Db {
   if (!db) {
-    throw new Error(
-      "DATABASE_URL is not set or still a placeholder. Copy .env.example to .env.local and paste the Supabase Postgres URI (Project Settings → Database).",
-    );
+    throw new Error(databaseUrlConfigError(process.env.DATABASE_URL));
   }
   return db;
 }

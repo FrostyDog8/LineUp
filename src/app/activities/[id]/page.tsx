@@ -52,6 +52,7 @@ export default async function ActivityPage({ params }: Props) {
       title={activity.name}
       subtitle={`${activity.typeText || "Activity"} · ${activity.joinMode === "open" ? "open join" : "must approve"} · ${activity.timezone}`}
       userLabel={user.displayName || user.phone}
+      askForName={!user.displayName?.trim()}
     >
       {access.status === "requested" ? (
         <p className="mb-6 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">

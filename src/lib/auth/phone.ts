@@ -4,6 +4,7 @@ import {
   parsePhoneNumberFromString,
   type CountryCode,
 } from "libphonenumber-js";
+import { COUNTRY_LABELS_EN } from "./country-labels-en";
 
 /** Fallback when IP geolocation is unavailable (Omer / IL default). */
 export const DEFAULT_COUNTRY: CountryCode = "IL";
@@ -14,13 +15,9 @@ export type PhoneCountryOption = {
   label: string;
 };
 
-const REGION_NAMES =
-  typeof Intl !== "undefined"
-    ? new Intl.DisplayNames(["en"], { type: "region" })
-    : null;
-
+/** Stable English label — never Intl at render time (Node vs browser ICU drift). */
 function countryLabel(code: CountryCode): string {
-  return REGION_NAMES?.of(code) ?? code;
+  return COUNTRY_LABELS_EN[code] ?? code;
 }
 
 /** Prefer common countries near the top; rest A–Z by English name. */
@@ -55,7 +52,7 @@ export function listPhoneCountries(): PhoneCountryOption[] {
   const preferredSet = new Set(PREFERRED_COUNTRIES);
   const rest = all
     .filter((c) => !preferredSet.has(c.code))
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .sort((a, b) => a.label.localeCompare(b.label, "en"));
 
   cachedOptions = [...preferred, ...rest];
   return cachedOptions;
@@ -68,7 +65,7 @@ export function isCountryCode(value: string): value is CountryCode {
 /**
  * Normalize raw input to E.164.
  * Accepts full international (+972…) or national digits with a country
- * (e.g. IL + 0526257840 → +972526257840).
+ * (e.g. IL + 0500000000 → +972500000000).
  */
 export function normalizePhone(
   raw: string,

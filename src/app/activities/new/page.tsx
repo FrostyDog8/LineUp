@@ -27,6 +27,7 @@ export default async function NewActivityPage() {
       title="Create activity"
       subtitle="You become the owner. Default ranks Regular + New are created."
       userLabel={user.displayName || user.phone}
+      askForName={!user.displayName?.trim()}
     >
       <Card className="max-w-lg">
         <CardHeader>

@@ -71,7 +71,7 @@ export function PhoneInput({
           type="tel"
           inputMode="tel"
           autoComplete="tel-national"
-          placeholder={country === "IL" ? "0526257840" : "National number"}
+          placeholder={country === "IL" ? "0500000000" : "Phone number"}
           value={nationalNumber}
           onChange={(e) => onNationalNumberChange(e.target.value)}
           disabled={disabled}

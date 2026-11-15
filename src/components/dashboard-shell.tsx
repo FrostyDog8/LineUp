@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, UserPlus } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
+import { MeetNameModal } from "@/components/meet-name-modal";
 import { Button } from "@/components/ui/button";
 
 type DashboardShellProps = {
@@ -8,6 +9,8 @@ type DashboardShellProps = {
   title?: string;
   subtitle?: string;
   userLabel?: string | null;
+  /** Show first-visit name prompt when display_name is empty. */
+  askForName?: boolean;
 };
 
 export function DashboardShell({
@@ -15,6 +18,7 @@ export function DashboardShell({
   title = "My activities",
   subtitle = "Create a new activity or join one with an invite link.",
   userLabel,
+  askForName = false,
 }: DashboardShellProps) {
   return (
     <div className="min-h-full flex flex-col">
@@ -70,6 +74,7 @@ export function DashboardShell({
         </div>
         {children}
       </main>
+      {askForName ? <MeetNameModal /> : null}
     </div>
   );
 }
