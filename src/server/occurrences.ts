@@ -14,6 +14,7 @@ export type OccurrenceRow = {
   capacity: number | null;
   place: string | null;
   status: "scheduled" | "registration_open" | "closed" | "cancelled";
+  subHeadline: string | null;
   notes: string | null;
 };
 
@@ -21,6 +22,7 @@ export type CreateOccurrenceInput = {
   startsAt: Date;
   capacity?: number | null;
   place?: string | null;
+  subHeadline?: string | null;
   notes?: string | null;
 };
 
@@ -28,6 +30,7 @@ export type UpdateOccurrenceInput = {
   startsAt?: Date;
   capacity?: number | null;
   place?: string | null;
+  subHeadline?: string | null;
   notes?: string | null;
   status?: OccurrenceRow["status"];
 };
@@ -50,6 +53,7 @@ function mapOccurrence(row: typeof occurrences.$inferSelect): OccurrenceRow {
     capacity: row.capacity,
     place: row.place,
     status: row.status,
+    subHeadline: row.subHeadline,
     notes: row.notes,
   };
 }
@@ -170,6 +174,7 @@ export async function createOccurrence(
       startsAt: input.startsAt,
       capacity: input.capacity ?? null,
       place: input.place?.trim() || null,
+      subHeadline: input.subHeadline?.trim() || null,
       notes: input.notes?.trim() || null,
     })
     .returning();
@@ -209,6 +214,9 @@ export async function updateOccurrence(
   if (input.startsAt !== undefined) patch.startsAt = input.startsAt;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
   if (input.place !== undefined) patch.place = input.place?.trim() || null;
+  if (input.subHeadline !== undefined) {
+    patch.subHeadline = input.subHeadline?.trim() || null;
+  }
   if (input.notes !== undefined) patch.notes = input.notes?.trim() || null;
   if (input.status !== undefined) patch.status = input.status;
 
@@ -227,4 +235,70 @@ export async function updateOccurrence(
   if (!row) throw new Error("Failed to update event");
 
   return mapOccurrence(row);
+}
+
+/**
+ * Manually open registration on one upcoming scheduled event.
+ * Owner or manager (canEditEvents). Scheduled auto-open jobs are still future work.
+ */
+export async function openRegistrationForOccurrence(
+  activityId: string,
+  actorUserId: string,
+  occurrenceId: string,
+): Promise<void> {
+  const access = await getActivityAccess(activityId, actorUserId);
+  if (!access?.canEditEvents) {
+    throw new Error("You cannot open registration for this activity");
+  }
+
+  const existing = await getOccurrence(activityId, occurrenceId);
+  if (!existing) throw new Error("Event not found");
+  if (existing.startsAt.getTime() <= Date.now()) {
+    throw new Error("Cannot open registration on a past event");
+  }
+  if (existing.status !== "scheduled") {
+    throw new Error("Registration is already open for this event");
+  }
+
+  const db = requireDb();
+  const [row] = await db
+    .update(occurrences)
+    .set({ status: "registration_open", updatedAt: new Date() })
+    .where(
+      and(
+        eq(occurrences.id, occurrenceId),
+        eq(occurrences.activityId, activityId),
+        eq(occurrences.status, "scheduled"),
+      ),
+    )
+    .returning({ id: occurrences.id });
+
+  if (!row) throw new Error("Could not open registration");
+}
+
+/** Delete an upcoming event; weekly activities are topped up afterward. */
+export async function deleteOccurrence(
+  activityId: string,
+  actorUserId: string,
+  occurrenceId: string,
+): Promise<void> {
+  await assertCanEditEvents(activityId, actorUserId);
+
+  const existing = await getOccurrence(activityId, occurrenceId);
+  if (!existing) throw new Error("Event not found");
+  if (existing.startsAt.getTime() <= Date.now()) {
+    throw new Error("Only upcoming events can be removed");
+  }
+
+  const db = requireDb();
+  await db
+    .delete(occurrences)
+    .where(
+      and(
+        eq(occurrences.id, occurrenceId),
+        eq(occurrences.activityId, activityId),
+      ),
+    );
+
+  await ensureWeeklyOccurrences(activityId);
 }

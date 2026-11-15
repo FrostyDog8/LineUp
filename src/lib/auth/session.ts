@@ -12,6 +12,7 @@ export type SessionUser = {
 
 export const SESSION_COOKIE = "lineup_session";
 const SESSION_DAYS = 30;
+const SESSION_MAX_AGE_SEC = SESSION_DAYS * 24 * 60 * 60;
 
 export function isAuthDevBypassEnabled(): boolean {
   if (process.env.AUTH_DEV_BYPASS === "true") return true;
@@ -31,13 +32,16 @@ export type IssuedSession = {
   expiresAt: Date;
 };
 
-/** Cookie options for lineup_session (httpOnly). */
+/** Cookie options for lineup_session (httpOnly, persistent ~30 days). */
 export function sessionCookieOptions(expiresAt: Date) {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
     path: "/",
+    // Both maxAge + expires so browsers keep the cookie across restarts
+    // (not a session-only cookie cleared when the tab/browser closes).
+    maxAge: SESSION_MAX_AGE_SEC,
     expires: expiresAt,
   };
 }
@@ -149,5 +153,12 @@ export async function destroySession(): Promise<void> {
       // Ignore missing DB on logout
     }
   }
-  cookieStore.delete(SESSION_COOKIE);
+  cookieStore.set(SESSION_COOKIE, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+    expires: new Date(0),
+  });
 }

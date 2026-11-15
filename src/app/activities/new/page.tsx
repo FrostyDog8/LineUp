@@ -5,13 +5,7 @@ import { CreateActivityFields } from "@/components/create-activity-fields";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { getSessionUser } from "@/lib/auth";
 import Link from "next/link";
 
@@ -24,22 +18,16 @@ export default async function NewActivityPage() {
   return (
     <DashboardShell
       title="Create activity"
-      subtitle="You become the owner. Default ranks member + New are created."
+      subtitle="You become the owner. Invite link is generated on create."
       userLabel={user.displayName || user.phone}
       askForName={!user.displayName?.trim()}
+      compact
     >
-      <Card className="max-w-lg">
-        <CardHeader>
-          <CardTitle>New activity</CardTitle>
-          <CardDescription>
-            Choose one-time or recurring, join mode, and capacity. Invite link
-            is generated on create.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <Card className="w-full max-w-4xl">
+        <CardContent className="pt-4">
           <ActionForm action={createActivityAction} className="space-y-4">
             <CreateActivityFields />
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3 border-t border-border pt-3">
               <FormSubmitButton pendingLabel="Creating…">Create</FormSubmitButton>
               <Button asChild variant="outline">
                 <Link href="/dashboard">Cancel</Link>

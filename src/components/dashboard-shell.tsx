@@ -11,6 +11,8 @@ type DashboardShellProps = {
   userLabel?: string | null;
   /** Show first-visit name prompt when display_name is empty. */
   askForName?: boolean;
+  /** Tighter vertical spacing (e.g. create form on desktop). */
+  compact?: boolean;
 };
 
 export function DashboardShell({
@@ -19,6 +21,7 @@ export function DashboardShell({
   subtitle = "Create a new activity or join one with an invite link.",
   userLabel,
   askForName = false,
+  compact = false,
 }: DashboardShellProps) {
   return (
     <div className="min-h-full flex flex-col">
@@ -63,13 +66,33 @@ export function DashboardShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
-        <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <main
+        className={
+          compact
+            ? "mx-auto w-full max-w-5xl flex-1 px-4 py-4 sm:px-6"
+            : "mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6"
+        }
+      >
+        <div
+          className={
+            compact
+              ? "mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between"
+              : "mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"
+          }
+        >
           <div>
-            <h1 className="font-display text-3xl tracking-tight text-foreground sm:text-4xl">
+            <h1
+              className={
+                compact
+                  ? "font-display text-2xl tracking-tight text-foreground sm:text-3xl"
+                  : "font-display text-3xl tracking-tight text-foreground sm:text-4xl"
+              }
+            >
               {title}
             </h1>
-            <p className="mt-1 max-w-xl text-muted-foreground">{subtitle}</p>
+            <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+              {subtitle}
+            </p>
           </div>
         </div>
         {children}

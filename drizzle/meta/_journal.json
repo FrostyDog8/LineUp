@@ -22,6 +22,34 @@
       "when": 1794850000000,
       "tag": "0002_schedule_weekly_custom",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794851000000,
+      "tag": "0003_one_time_and_reg_opens",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794852000000,
+      "tag": "0004_occurrence_sub_headline",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794853000000,
+      "tag": "0005_rank_merge_and_reg_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794854000000,
+      "tag": "0006_rank_merge_weekday",
+      "breakpoints": true
     }
   ]
 }

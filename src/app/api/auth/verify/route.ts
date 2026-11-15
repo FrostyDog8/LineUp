@@ -1,8 +1,11 @@
+import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  createUserSession,
   findOrCreateUserByPhone,
   isAuthDevBypassEnabled,
+  issueSession,
+  SESSION_COOKIE,
+  sessionCookieOptions,
 } from "@/lib/auth";
 import { isValidPhone, normalizePhone } from "@/lib/auth/phone";
 import { formatDbError } from "@/lib/db";
@@ -22,17 +25,17 @@ export async function POST(request: Request) {
   try {
     json = await request.json();
   } catch {
-    return Response.json({ error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
-    return Response.json({ error: "Invalid payload" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
   const phone = normalizePhone(parsed.data.phone);
   if (!isValidPhone(phone)) {
-    return Response.json(
+    return NextResponse.json(
       {
         error:
           "Enter a valid phone for the selected country (e.g. Israel 0500000000 → +972500000000).",
@@ -42,7 +45,7 @@ export async function POST(request: Request) {
   }
 
   if (!isAuthDevBypassEnabled()) {
-    return Response.json(
+    return NextResponse.json(
       {
         error:
           "OTP verification is not wired yet. Enable AUTH_DEV_BYPASS=true for local testing.",
@@ -53,14 +56,20 @@ export async function POST(request: Request) {
 
   try {
     const user = await findOrCreateUserByPhone(phone);
-    await createUserSession(user.id);
-    return Response.json({
+    const { token, expiresAt } = await issueSession(user.id);
+    const response = NextResponse.json({
       ok: true,
       stubbed: true,
       phone: user.phone,
     });
+    response.cookies.set(
+      SESSION_COOKIE,
+      token,
+      sessionCookieOptions(expiresAt),
+    );
+    return response;
   } catch (err) {
-    return Response.json(
+    return NextResponse.json(
       {
         error: formatDbError(err),
       },
