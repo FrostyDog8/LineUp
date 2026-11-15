@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   createOccurrenceAction,
   deleteOccurrenceAction,
+  openRegistrationForOccurrenceAction,
   updateOccurrenceAction,
   type ActionResult,
 } from "@/app/actions/activities";
@@ -55,6 +56,8 @@ export function EventsPanel({
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
   const canAdd = canEdit;
   const minStart = minDateTimeLocal(timezone);
   const boundCreate = createOccurrenceAction.bind(null, activityId);
@@ -76,6 +79,24 @@ export function EventsPanel({
     }
   }
 
+  async function openRegistration(occurrenceId: string) {
+    setOpeningId(occurrenceId);
+    setOpenError(null);
+    try {
+      const result = await openRegistrationForOccurrenceAction(
+        activityId,
+        occurrenceId,
+      );
+      if (!result.ok) {
+        setOpenError(result.error);
+        return;
+      }
+      router.refresh();
+    } finally {
+      setOpeningId(null);
+    }
+  }
+
   const removingEvent = removingId
     ? events.find((e) => e.id === removingId)
     : null;
@@ -92,6 +113,12 @@ export function EventsPanel({
           </Button>
         ) : null}
       </div>
+
+      {openError ? (
+        <p className="text-sm text-red-700" role="alert">
+          {openError}
+        </p>
+      ) : null}
 
       {events.length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -135,7 +162,19 @@ export function EventsPanel({
                     </p>
                   </div>
                   {canEdit && !isPast ? (
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      {event.status === "scheduled" ? (
+                        <button
+                          type="button"
+                          className="text-sm text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+                          disabled={openingId === event.id}
+                          onClick={() => void openRegistration(event.id)}
+                        >
+                          {openingId === event.id
+                            ? "Opening…"
+                            : "Open registration"}
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="text-sm text-muted-foreground underline-offset-2 hover:underline"

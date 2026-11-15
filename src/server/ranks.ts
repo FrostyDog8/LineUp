@@ -1,6 +1,7 @@
 import { and, asc, eq, ne } from "drizzle-orm";
 import { requireDb } from "@/lib/db";
 import { activities, memberships, ranks } from "@/lib/db/schema";
+import { parseWeeklyTime } from "@/lib/datetime";
 import { getActivityAccess } from "./permissions";
 
 export type RankMergeMode = "manual" | "scheduled";
@@ -13,6 +14,8 @@ export type RankRow = {
   isDefault: boolean;
   mergeMode: RankMergeMode;
   mergeAt: Date | null;
+  mergeWeekday: number | null;
+  mergeTime: string | null;
   createdAt: Date;
 };
 
@@ -25,6 +28,13 @@ function mapRank(row: typeof ranks.$inferSelect): RankRow {
     isDefault: row.isDefault,
     mergeMode: row.mergeMode === "scheduled" ? "scheduled" : "manual",
     mergeAt: row.mergeAt ?? null,
+    mergeWeekday:
+      typeof row.mergeWeekday === "number" &&
+      row.mergeWeekday >= 0 &&
+      row.mergeWeekday <= 6
+        ? row.mergeWeekday
+        : null,
+    mergeTime: row.mergeTime ?? null,
     createdAt: row.createdAt,
   };
 }
@@ -39,14 +49,82 @@ export async function listRanks(activityId: string): Promise<RankRow[]> {
   return rows.map(mapRank);
 }
 
+export type RankMergeInput = {
+  name?: string;
+  mergeMode?: RankMergeMode;
+  mergeAt?: Date | null;
+  mergeWeekday?: number | null;
+  mergeTime?: string | null;
+};
+
+function normalizeMergePatch(
+  input: RankMergeInput,
+  existing?: typeof ranks.$inferSelect,
+): Partial<typeof ranks.$inferInsert> {
+  const patch: Partial<typeof ranks.$inferInsert> = {};
+
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name) throw new Error("Rank name is required");
+    patch.name = name;
+  }
+
+  const nextMode =
+    input.mergeMode !== undefined
+      ? input.mergeMode === "scheduled"
+        ? "scheduled"
+        : "manual"
+      : existing
+        ? existing.mergeMode === "scheduled"
+          ? "scheduled"
+          : "manual"
+        : "manual";
+
+  if (input.mergeMode !== undefined) {
+    patch.mergeMode = nextMode;
+  }
+
+  if (nextMode === "manual") {
+    if (input.mergeMode !== undefined || input.mergeAt !== undefined) {
+      patch.mergeAt = null;
+    }
+    if (input.mergeMode !== undefined || input.mergeWeekday !== undefined) {
+      patch.mergeWeekday = null;
+    }
+    if (input.mergeMode !== undefined || input.mergeTime !== undefined) {
+      patch.mergeTime = null;
+    }
+    return patch;
+  }
+
+  if (input.mergeAt !== undefined) {
+    patch.mergeAt = input.mergeAt;
+  }
+  if (input.mergeWeekday !== undefined) {
+    if (
+      input.mergeWeekday != null &&
+      (input.mergeWeekday < 0 || input.mergeWeekday > 6)
+    ) {
+      throw new Error("Merge day must be Sunday–Saturday");
+    }
+    patch.mergeWeekday = input.mergeWeekday;
+  }
+  if (input.mergeTime !== undefined) {
+    if (input.mergeTime) {
+      parseWeeklyTime(input.mergeTime);
+      patch.mergeTime = input.mergeTime.trim();
+    } else {
+      patch.mergeTime = null;
+    }
+  }
+
+  return patch;
+}
+
 export async function createRank(
   activityId: string,
   actorUserId: string,
-  input: {
-    name?: string;
-    mergeMode?: RankMergeMode;
-    mergeAt?: Date | null;
-  } = {},
+  input: RankMergeInput = {},
 ): Promise<RankRow> {
   const access = await getActivityAccess(activityId, actorUserId);
   if (!access?.canManageSettings) {
@@ -54,9 +132,6 @@ export async function createRank(
   }
   const name = (input.name ?? "New rank").trim() || "New rank";
   const mergeMode = input.mergeMode === "scheduled" ? "scheduled" : "manual";
-  if (mergeMode === "scheduled" && !input.mergeAt) {
-    throw new Error("Pick a merge date and time");
-  }
 
   const db = requireDb();
   const existing = await listRanks(activityId);
@@ -69,6 +144,9 @@ export async function createRank(
       isDefault: false,
       mergeMode,
       mergeAt: mergeMode === "scheduled" ? (input.mergeAt ?? null) : null,
+      mergeWeekday:
+        mergeMode === "scheduled" ? (input.mergeWeekday ?? null) : null,
+      mergeTime: mergeMode === "scheduled" ? (input.mergeTime ?? null) : null,
     })
     .returning();
   if (!row) throw new Error("Failed to create rank");
@@ -79,11 +157,7 @@ export async function updateRank(
   activityId: string,
   actorUserId: string,
   rankId: string,
-  input: {
-    name?: string;
-    mergeMode?: RankMergeMode;
-    mergeAt?: Date | null;
-  },
+  input: RankMergeInput,
 ): Promise<RankRow> {
   const access = await getActivityAccess(activityId, actorUserId);
   if (!access?.canManageSettings) {
@@ -96,29 +170,8 @@ export async function updateRank(
   });
   if (!existing) throw new Error("Rank not found");
 
-  const patch: Partial<typeof ranks.$inferInsert> = {};
-  if (input.name !== undefined) {
-    const name = input.name.trim();
-    if (!name) throw new Error("Rank name is required");
-    patch.name = name;
-  }
-  if (input.mergeMode !== undefined) {
-    const mergeMode =
-      input.mergeMode === "scheduled" ? "scheduled" : "manual";
-    patch.mergeMode = mergeMode;
-    if (mergeMode === "manual") {
-      patch.mergeAt = null;
-    } else if (input.mergeAt !== undefined) {
-      if (!input.mergeAt) throw new Error("Pick a merge date and time");
-      patch.mergeAt = input.mergeAt;
-    } else if (!existing.mergeAt) {
-      throw new Error("Pick a merge date and time");
-    }
-  } else if (input.mergeAt !== undefined) {
-    if (existing.mergeMode === "scheduled" || input.mergeAt) {
-      patch.mergeAt = input.mergeAt;
-    }
-  }
+  const patch = normalizeMergePatch(input, existing);
+  if (Object.keys(patch).length === 0) return mapRank(existing);
 
   const [row] = await db
     .update(ranks)

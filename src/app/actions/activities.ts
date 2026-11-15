@@ -23,7 +23,7 @@ import {
   createOccurrence,
   deleteOccurrence,
   ensureWeeklyOccurrences,
-  openRegistrationNow,
+  openRegistrationForOccurrence,
   updateOccurrence,
 } from "@/server/occurrences";
 import {
@@ -181,49 +181,12 @@ export async function updateSettingsAction(
   const defaultRankId = String(formData.get("defaultRankId") ?? "") || null;
   const name = String(formData.get("name") ?? "");
   const defaultPlace = String(formData.get("defaultPlace") ?? "");
-  const registrationOpensModeRaw = String(
-    formData.get("registrationOpensMode") ?? "scheduled",
-  );
-  const registrationOpensMode: "scheduled" | "manual" =
-    registrationOpensModeRaw === "manual" ? "manual" : "scheduled";
-  const registrationOpensAtRaw = String(
-    formData.get("registrationOpensAt") ?? "",
-  ).trim();
-  const registrationOpensWeekdayRaw = String(
-    formData.get("registrationOpensWeekday") ?? "",
-  );
-  const registrationOpensTime = String(
-    formData.get("registrationOpensTime") ?? "",
-  ).trim();
   const weeklyWeekdayRaw = String(formData.get("weeklyWeekday") ?? "");
   const weeklyTimeRaw = String(formData.get("weeklyTime") ?? "").trim();
 
   try {
     const existing = await getActivityById(activityId);
     if (!existing) throw new Error("Activity not found");
-    const registrationOpensAt = registrationOpensAtRaw
-      ? parseDateTimeLocal(
-          registrationOpensAtRaw,
-          existing.timezone,
-        ).toISOString()
-      : (existing.scheduleDefaults.registrationOpensAt ?? null);
-    const scheduleDefaults = {
-      registrationOpensHoursBefore:
-        existing.scheduleDefaults.registrationOpensHoursBefore,
-      registrationOpensAt,
-      registrationOpensWeekday:
-        registrationOpensWeekdayRaw !== ""
-          ? Number(registrationOpensWeekdayRaw)
-          : (existing.scheduleDefaults.registrationOpensWeekday ?? null),
-      registrationOpensTime:
-        registrationOpensTime ||
-        existing.scheduleDefaults.registrationOpensTime ||
-        null,
-      registrationOpensMode,
-      // Preserve stored merge default; per-rank merge lives on ranks now.
-      defaultRankMergeHoursBefore:
-        existing.scheduleDefaults.defaultRankMergeHoursBefore ?? 24,
-    };
 
     await updateActivitySettings(activityId, user.id, {
       joinMode,
@@ -233,7 +196,8 @@ export async function updateSettingsAction(
       defaultRankId,
       name: name || undefined,
       defaultPlace,
-      scheduleDefaults,
+      // Registration open timing is event-scoped in UX; keep stored defaults.
+      scheduleDefaults: existing.scheduleDefaults,
       weeklyWeekday:
         weeklyWeekdayRaw === "" ? undefined : Number(weeklyWeekdayRaw),
       weeklyTime: weeklyTimeRaw === "" ? undefined : weeklyTimeRaw,
@@ -244,7 +208,7 @@ export async function updateSettingsAction(
     await ensureWeeklyOccurrences(activityId);
     revalidatePath(`/activities/${activityId}`);
     revalidatePath(`/activities/${activityId}/settings`);
-    return { ok: true, message: "Settings saved." };
+    return { ok: true };
   } catch (err) {
     return {
       ok: false,
@@ -491,22 +455,51 @@ export async function updateRankAction(
   const mergeModeRaw = String(formData.get("mergeMode") ?? "manual");
   const mergeMode = mergeModeRaw === "scheduled" ? "scheduled" : "manual";
   const mergeAtRaw = String(formData.get("mergeAt") ?? "").trim();
+  const mergeWeekdayRaw = String(formData.get("mergeWeekday") ?? "").trim();
+  const mergeTimeRaw = String(formData.get("mergeTime") ?? "").trim();
 
   try {
     const activity = await getActivityById(activityId);
     if (!activity) throw new Error("Activity not found");
+    const weekly = activity.scheduleMode === "weekly";
     const mergeAt =
-      mergeMode === "scheduled" && mergeAtRaw
+      mergeMode === "scheduled" && !weekly && mergeAtRaw
         ? parseDateTimeLocal(mergeAtRaw, activity.timezone)
         : null;
+    const mergeWeekday =
+      mergeMode === "scheduled" && weekly && mergeWeekdayRaw !== ""
+        ? Number(mergeWeekdayRaw)
+        : null;
+    const mergeTime =
+      mergeMode === "scheduled" && weekly && mergeTimeRaw
+        ? mergeTimeRaw
+        : null;
+
+    if (mergeMode === "scheduled") {
+      if (weekly) {
+        if (
+          mergeWeekday == null ||
+          Number.isNaN(mergeWeekday) ||
+          mergeWeekday < 0 ||
+          mergeWeekday > 6 ||
+          !mergeTime
+        ) {
+          throw new Error("Pick a merge day and time");
+        }
+      } else if (!mergeAt) {
+        throw new Error("Pick a merge date and time");
+      }
+    }
 
     await updateRank(activityId, user.id, rankId, {
       name,
       mergeMode,
-      mergeAt,
+      mergeAt: weekly ? null : mergeAt,
+      mergeWeekday: weekly ? mergeWeekday : null,
+      mergeTime: weekly ? mergeTime : null,
     });
     revalidatePath(`/activities/${activityId}/settings`);
-    return { ok: true, message: "Rank saved." };
+    return { ok: true };
   } catch (err) {
     return {
       ok: false,
@@ -515,21 +508,15 @@ export async function updateRankAction(
   }
 }
 
-export async function openRegistrationNowAction(
+export async function openRegistrationForOccurrenceAction(
   activityId: string,
+  occurrenceId: string,
 ): Promise<ActionResult> {
   const user = await requireSessionUser();
   try {
-    const count = await openRegistrationNow(activityId, user.id);
+    await openRegistrationForOccurrence(activityId, user.id, occurrenceId);
     revalidatePath(`/activities/${activityId}`);
-    revalidatePath(`/activities/${activityId}/settings`);
-    return {
-      ok: true,
-      message:
-        count > 0
-          ? `Opened registration on ${count} upcoming event${count === 1 ? "" : "s"}.`
-          : "No upcoming scheduled events to open.",
-    };
+    return { ok: true, message: "Registration opened." };
   } catch (err) {
     return {
       ok: false,

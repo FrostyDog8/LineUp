@@ -238,33 +238,42 @@ export async function updateOccurrence(
 }
 
 /**
- * Manually open registration on upcoming scheduled events.
+ * Manually open registration on one upcoming scheduled event.
  * Owner or manager (canEditEvents). Scheduled auto-open jobs are still future work.
  */
-export async function openRegistrationNow(
+export async function openRegistrationForOccurrence(
   activityId: string,
   actorUserId: string,
-): Promise<number> {
+  occurrenceId: string,
+): Promise<void> {
   const access = await getActivityAccess(activityId, actorUserId);
   if (!access?.canEditEvents) {
     throw new Error("You cannot open registration for this activity");
   }
 
+  const existing = await getOccurrence(activityId, occurrenceId);
+  if (!existing) throw new Error("Event not found");
+  if (existing.startsAt.getTime() <= Date.now()) {
+    throw new Error("Cannot open registration on a past event");
+  }
+  if (existing.status !== "scheduled") {
+    throw new Error("Registration is already open for this event");
+  }
+
   const db = requireDb();
-  const now = new Date();
-  const updated = await db
+  const [row] = await db
     .update(occurrences)
-    .set({ status: "registration_open", updatedAt: now })
+    .set({ status: "registration_open", updatedAt: new Date() })
     .where(
       and(
+        eq(occurrences.id, occurrenceId),
         eq(occurrences.activityId, activityId),
-        gt(occurrences.startsAt, now),
         eq(occurrences.status, "scheduled"),
       ),
     )
     .returning({ id: occurrences.id });
 
-  return updated.length;
+  if (!row) throw new Error("Could not open registration");
 }
 
 /** Delete an upcoming event; weekly activities are topped up afterward. */

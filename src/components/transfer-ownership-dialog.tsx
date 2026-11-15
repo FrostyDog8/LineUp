@@ -15,6 +15,8 @@ type Props = {
   candidates: MemberRow[];
   ranks: RankRow[];
   defaultRankId: string | null;
+  /** Compact trigger for top nav (no empty-state hint under the button). */
+  compact?: boolean;
 };
 
 export function TransferOwnershipDialog({
@@ -22,6 +24,7 @@ export function TransferOwnershipDialog({
   candidates,
   ranks,
   defaultRankId,
+  compact = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const boundTransfer = transferOwnershipAction.bind(null, activityId);
@@ -31,13 +34,18 @@ export function TransferOwnershipDialog({
       <Button
         type="button"
         size="sm"
-        variant="secondary"
+        variant={compact ? "outline" : "secondary"}
         disabled={candidates.length === 0}
+        title={
+          candidates.length === 0
+            ? "Invite and approve another member before transferring"
+            : undefined
+        }
         onClick={() => setOpen(true)}
       >
         Transfer ownership
       </Button>
-      {candidates.length === 0 ? (
+      {!compact && candidates.length === 0 ? (
         <p className="mt-1 text-xs text-muted-foreground">
           Invite and approve another member before transferring.
         </p>
@@ -62,65 +70,80 @@ export function TransferOwnershipDialog({
               Transfer ownership
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Pick a new owner and your rank afterward.
+              {candidates.length === 0
+                ? "Invite and approve another member before transferring."
+                : "Pick a new owner and your rank afterward."}
             </p>
-            <ActionForm
-              action={async (prev, formData) => {
-                const result = await boundTransfer(prev, formData);
-                if (result.ok) setOpen(false);
-                return result;
-              }}
-              className="mt-4 space-y-3"
-            >
-              <div className="space-y-1">
-                <Label htmlFor="newOwnerUserId">New owner</Label>
-                <select
-                  id="newOwnerUserId"
-                  name="newOwnerUserId"
-                  required
-                  className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
-                  defaultValue=""
-                >
-                  <option value="" disabled>
-                    Select member
-                  </option>
-                  {candidates.map((m) => (
-                    <option key={m.userId} value={m.userId}>
-                      {m.displayName || m.phone} ({m.role})
+            {candidates.length > 0 ? (
+              <ActionForm
+                action={async (prev, formData) => {
+                  const result = await boundTransfer(prev, formData);
+                  if (result.ok) setOpen(false);
+                  return result;
+                }}
+                className="mt-4 space-y-3"
+              >
+                <div className="space-y-1">
+                  <Label htmlFor="newOwnerUserId">New owner</Label>
+                  <select
+                    id="newOwnerUserId"
+                    name="newOwnerUserId"
+                    required
+                    className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      Select member
                     </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="outgoingOwnerRankId">Your new rank</Label>
-                <select
-                  id="outgoingOwnerRankId"
-                  name="outgoingOwnerRankId"
-                  required
-                  className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
-                  defaultValue={defaultRankId ?? ranks[0]?.id ?? ""}
-                >
-                  {ranks.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <FormSubmitButton size="sm" pendingLabel="…">
-                  Transfer
-                </FormSubmitButton>
+                    {candidates.map((m) => (
+                      <option key={m.userId} value={m.userId}>
+                        {m.displayName || m.phone} ({m.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="outgoingOwnerRankId">Your new rank</Label>
+                  <select
+                    id="outgoingOwnerRankId"
+                    name="outgoingOwnerRankId"
+                    required
+                    className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
+                    defaultValue={defaultRankId ?? ranks[0]?.id ?? ""}
+                  >
+                    {ranks.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <FormSubmitButton size="sm" pendingLabel="…">
+                    Transfer
+                  </FormSubmitButton>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </ActionForm>
+            ) : (
+              <div className="mt-4">
                 <Button
                   type="button"
                   size="sm"
                   variant="ghost"
                   onClick={() => setOpen(false)}
                 >
-                  Cancel
+                  Close
                 </Button>
               </div>
-            </ActionForm>
+            )}
           </div>
         </div>
       ) : null}

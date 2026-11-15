@@ -1,30 +1,37 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import {
   createRankAction,
   deleteRankAction,
   updateRankAction,
 } from "@/app/actions/activities";
-import { ActionForm } from "@/components/action-form";
-import { FormSubmitButton } from "@/components/form-submit-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { formatDateTimeLocal } from "@/lib/datetime";
+import { formatDateTimeLocal, zonedParts } from "@/lib/datetime";
+import { WEEKDAY_OPTIONS } from "@/lib/schedule-defaults";
 import type { RankRow } from "@/server/ranks";
 
 type Props = {
   activityId: string;
   timezone: string;
+  scheduleMode: "one_time" | "weekly" | "custom";
+  defaultMergeWeekday: number;
   ranks: RankRow[];
 };
 
-export function RanksSettings({ activityId, timezone, ranks }: Props) {
+export function RanksSettings({
+  activityId,
+  timezone,
+  scheduleMode,
+  defaultMergeWeekday,
+  ranks,
+}: Props) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function onNewRank() {
     setCreating(true);
@@ -41,54 +48,40 @@ export function RanksSettings({ activityId, timezone, ranks }: Props) {
     }
   }
 
+  async function onDelete(rankId: string) {
+    setDeleteError(null);
+    const result = await deleteRankAction(activityId, rankId, null);
+    if (!result.ok) {
+      setDeleteError(result.error);
+      return;
+    }
+    router.refresh();
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <ul className="space-y-2">
-        {ranks.map((rank) => {
-          const boundUpdate = updateRankAction.bind(null, activityId, rank.id);
-          return (
-            <li
-              key={rank.id}
-              className="rounded-lg border border-border px-2.5 py-2"
-            >
-              <ActionForm action={boundUpdate} className="space-y-2">
-                <div className="space-y-1">
-                  <Label htmlFor={`rank-name-${rank.id}`}>Name</Label>
-                  <Input
-                    id={`rank-name-${rank.id}`}
-                    name="name"
-                    defaultValue={rank.name}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Merge into main list</Label>
-                  <RankMergeFields rank={rank} timezone={timezone} />
-                </div>
-                <FormSubmitButton size="sm" variant="outline" pendingLabel="…">
-                  Save
-                </FormSubmitButton>
-              </ActionForm>
-              {ranks.length <= 1 ? (
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  Cannot delete the only remaining rank.
-                </p>
-              ) : (
-                <ActionForm
-                  action={deleteRankAction.bind(null, activityId, rank.id)}
-                  className="mt-1"
-                >
-                  <FormSubmitButton size="sm" variant="ghost" pendingLabel="…">
-                    Delete{rank.isDefault ? " (default)" : ""}
-                  </FormSubmitButton>
-                </ActionForm>
-              )}
-            </li>
-          );
-        })}
+        {ranks.map((rank) => (
+          <RankRowEditor
+            key={rank.id}
+            activityId={activityId}
+            timezone={timezone}
+            scheduleMode={scheduleMode}
+            defaultMergeWeekday={defaultMergeWeekday}
+            rank={rank}
+            canDelete={ranks.length > 1}
+            onDelete={() => void onDelete(rank.id)}
+          />
+        ))}
       </ul>
 
-      <div className="border-t border-border pt-3">
+      {deleteError ? (
+        <p className="text-sm text-red-700" role="alert">
+          {deleteError}
+        </p>
+      ) : null}
+
+      <div className="pt-1">
         <Button
           type="button"
           size="sm"
@@ -102,77 +95,205 @@ export function RanksSettings({ activityId, timezone, ranks }: Props) {
             {createError}
           </p>
         ) : null}
-        <p className="mt-1 text-xs text-muted-foreground">
-          Creates “New rank” — rename it and set merge timing.
-        </p>
       </div>
     </div>
   );
 }
 
-function RankMergeFields({
-  rank,
+function RankRowEditor({
+  activityId,
   timezone,
+  scheduleMode,
+  defaultMergeWeekday,
+  rank,
+  canDelete,
+  onDelete,
 }: {
-  rank: RankRow;
+  activityId: string;
   timezone: string;
+  scheduleMode: "one_time" | "weekly" | "custom";
+  defaultMergeWeekday: number;
+  rank: RankRow;
+  canDelete: boolean;
+  onDelete: () => void;
 }) {
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const weekly = scheduleMode === "weekly";
+  const fromAt = rank.mergeAt ? zonedParts(new Date(rank.mergeAt), timezone) : null;
+  const initialWeekday =
+    rank.mergeWeekday ?? fromAt?.weekday ?? defaultMergeWeekday;
+  const initialTime =
+    rank.mergeTime ??
+    (fromAt
+      ? `${String(fromAt.hour).padStart(2, "0")}:${String(fromAt.minute).padStart(2, "0")}`
+      : "12:00");
+
   const [mode, setMode] = useState<"manual" | "scheduled">(rank.mergeMode);
+  const [error, setError] = useState<string | null>(null);
+  const modeInitRef = useRef(true);
+
+  const save = useCallback(
+    async (overrideMode?: "manual" | "scheduled") => {
+      const form = formRef.current;
+      if (!form) return;
+      setError(null);
+      const fd = new FormData(form);
+      if (overrideMode) fd.set("mergeMode", overrideMode);
+      const result = await updateRankAction(activityId, rank.id, null, fd);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    },
+    [activityId, rank.id, router],
+  );
+
+  const scheduleSave = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      void save();
+    }, 400);
+  }, [save]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (modeInitRef.current) {
+      modeInitRef.current = false;
+      return;
+    }
+    const t = setTimeout(() => {
+      void save(mode);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [mode, save]);
+
+  function setMergeMode(next: "manual" | "scheduled") {
+    if (next === mode) return;
+    setMode(next);
+  }
 
   return (
-    <div className="space-y-2">
-      <input type="hidden" name="mergeMode" value={mode} />
-      <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-muted/50 p-1">
-        {(
-          [
-            { value: "scheduled" as const, label: "Date & time" },
-            { value: "manual" as const, label: "Manual" },
-          ] as const
-        ).map((opt) => {
-          const selected = mode === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => setMode(opt.value)}
-              className={
-                selected
-                  ? "rounded-md bg-card px-2 py-1.5 text-xs font-medium text-foreground shadow-sm"
-                  : "rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-              }
-            >
-              {opt.label}
-            </button>
-          );
-        })}
-      </div>
-      {mode === "scheduled" ? (
-        <div className="space-y-1">
-          <Label htmlFor={`merge-at-${rank.id}`} className="sr-only">
-            Merge at
-          </Label>
+    <li className="rounded-lg border border-border px-2 py-1.5">
+      <form
+        ref={formRef}
+        className="space-y-1.5"
+        onChange={scheduleSave}
+        onBlur={(e) => {
+          if (!formRef.current?.contains(e.relatedTarget as Node | null)) {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            void save();
+          }
+        }}
+      >
+        <div className="flex items-center gap-1.5">
           <Input
-            id={`merge-at-${rank.id}`}
-            name="mergeAt"
-            type="datetime-local"
+            name="name"
+            defaultValue={rank.name}
             required
-            defaultValue={
-              rank.mergeAt
-                ? formatDateTimeLocal(new Date(rank.mergeAt), timezone)
-                : ""
-            }
+            aria-label="Rank name"
+            className="h-8 flex-1"
           />
-          <p className="text-xs text-muted-foreground">
-            When this rank merges into the main list.
-          </p>
+          {canDelete ? (
+            <button
+              type="button"
+              className="shrink-0 px-1.5 text-xs text-red-700 underline-offset-2 hover:underline"
+              onClick={onDelete}
+            >
+              Delete
+            </button>
+          ) : (
+            <span
+              className="shrink-0 text-[10px] text-muted-foreground"
+              title="Cannot delete the only remaining rank"
+            >
+              Only rank
+            </span>
+          )}
         </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Merges only when an owner or manager merges it (manual merge action
-          lands with line UI).
+
+        <input type="hidden" name="mergeMode" value={mode} />
+        <div className="grid grid-cols-2 gap-1 rounded-md border border-border bg-muted/50 p-0.5">
+          {(
+            [
+              {
+                value: "scheduled" as const,
+                label: weekly ? "Day & time" : "Date & time",
+              },
+              { value: "manual" as const, label: "Manual" },
+            ] as const
+          ).map((opt) => {
+            const selected = mode === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setMergeMode(opt.value)}
+                className={
+                  selected
+                    ? "rounded px-2 py-1 text-xs font-medium whitespace-nowrap text-foreground bg-card shadow-sm"
+                    : "rounded px-2 py-1 text-xs font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
+                }
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {mode === "scheduled" ? (
+          weekly ? (
+            <div className="grid grid-cols-2 gap-1.5">
+              <select
+                name="mergeWeekday"
+                defaultValue={initialWeekday}
+                aria-label="Merge day"
+                className="flex h-8 w-full rounded-md border border-input bg-card px-2 text-xs"
+              >
+                {WEEKDAY_OPTIONS.map((d) => (
+                  <option key={d.value} value={d.value}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                name="mergeTime"
+                type="time"
+                defaultValue={initialTime}
+                required
+                aria-label="Merge time"
+                className="h-8"
+              />
+            </div>
+          ) : (
+            <Input
+              name="mergeAt"
+              type="datetime-local"
+              required
+              aria-label="Merge at"
+              className="h-8"
+              defaultValue={
+                rank.mergeAt
+                  ? formatDateTimeLocal(new Date(rank.mergeAt), timezone)
+                  : ""
+              }
+            />
+          )
+        ) : null}
+      </form>
+      {error ? (
+        <p className="mt-1 text-xs text-red-700" role="alert">
+          {error}
         </p>
-      )}
-    </div>
+      ) : null}
+    </li>
   );
 }
