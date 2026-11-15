@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
-import { and, eq, gt } from "drizzle-orm";
-import { requireDb } from "@/lib/db";
+import { and, eq, gt, sql } from "drizzle-orm";
+import { requireDb, withDb } from "@/lib/db";
 import { sessions, users } from "@/lib/db/schema";
 
 export type SessionUser = {
@@ -26,59 +26,76 @@ function newSessionToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+export type IssuedSession = {
+  token: string;
+  expiresAt: Date;
+};
+
+/** Cookie options for lineup_session (httpOnly). */
+export function sessionCookieOptions(expiresAt: Date) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    expires: expiresAt,
+  };
+}
+
 export async function findOrCreateUserByPhone(
   phone: string,
   displayName?: string | null,
 ) {
-  const db = requireDb();
-  const existing = await db.query.users.findFirst({
-    where: eq(users.phone, phone),
-  });
-  if (existing) {
-    if (displayName && !existing.displayName) {
-      const [updated] = await db
-        .update(users)
-        .set({ displayName, updatedAt: new Date() })
-        .where(eq(users.id, existing.id))
-        .returning();
-      return updated ?? existing;
+  return withDb(async (db) => {
+    const existing = await db.query.users.findFirst({
+      where: eq(users.phone, phone),
+    });
+    if (existing) {
+      if (displayName && !existing.displayName) {
+        const [updated] = await db
+          .update(users)
+          .set({ displayName, updatedAt: new Date() })
+          .where(eq(users.id, existing.id))
+          .returning();
+        return updated ?? existing;
+      }
+      return existing;
     }
-    return existing;
-  }
-  const [created] = await db
-    .insert(users)
-    .values({
-      phone,
-      displayName: displayName?.trim() || null,
-    })
-    .returning();
-  if (!created) throw new Error("Failed to create user");
-  return created;
+    const [created] = await db
+      .insert(users)
+      .values({
+        phone,
+        displayName: displayName?.trim() || null,
+      })
+      .returning();
+    if (!created) throw new Error("Failed to create user");
+    return created;
+  });
+}
+
+/** Insert a session row and return the raw token (caller sets the cookie). */
+export async function issueSession(userId: string): Promise<IssuedSession> {
+  return withDb(async (db) => {
+    const token = newSessionToken();
+    const tokenHash = hashToken(token);
+    const expiresAt = new Date(
+      Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000,
+    );
+
+    await db.insert(sessions).values({
+      userId,
+      token: tokenHash,
+      expiresAt,
+    });
+
+    return { token, expiresAt };
+  });
 }
 
 export async function createUserSession(userId: string): Promise<string> {
-  const db = requireDb();
-  const token = newSessionToken();
-  const tokenHash = hashToken(token);
-  const expiresAt = new Date(
-    Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000,
-  );
-
-  await db.insert(sessions).values({
-    userId,
-    token: tokenHash,
-    expiresAt,
-  });
-
+  const { token, expiresAt } = await issueSession(userId);
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires: expiresAt,
-  });
-
+  cookieStore.set(SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
   return token;
 }
 
@@ -95,6 +112,7 @@ export async function readSessionUser(): Promise<SessionUser | null> {
   }
 
   const tokenHash = hashToken(token);
+  // Use SQL now() so prerender does not see a current-time Date read.
   const row = await db
     .select({
       id: users.id,
@@ -105,7 +123,7 @@ export async function readSessionUser(): Promise<SessionUser | null> {
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .where(
-      and(eq(sessions.token, tokenHash), gt(sessions.expiresAt, new Date())),
+      and(eq(sessions.token, tokenHash), gt(sessions.expiresAt, sql`now()`)),
     )
     .limit(1);
 
@@ -124,8 +142,9 @@ export async function destroySession(): Promise<void> {
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (token) {
     try {
-      const db = requireDb();
-      await db.delete(sessions).where(eq(sessions.token, hashToken(token)));
+      await withDb(async (db) => {
+        await db.delete(sessions).where(eq(sessions.token, hashToken(token)));
+      });
     } catch {
       // Ignore missing DB on logout
     }

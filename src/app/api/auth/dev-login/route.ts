@@ -1,5 +1,12 @@
+import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAuthDevBypassEnabled, signInWithPhoneDev } from "@/lib/auth";
+import {
+  findOrCreateUserByPhone,
+  isAuthDevBypassEnabled,
+  issueSession,
+  SESSION_COOKIE,
+  sessionCookieOptions,
+} from "@/lib/auth/session";
 import { isValidPhone, normalizePhone } from "@/lib/auth/phone";
 import { formatDbError } from "@/lib/db";
 
@@ -9,7 +16,7 @@ const bodySchema = z.object({
 
 export async function POST(request: Request) {
   if (!isAuthDevBypassEnabled()) {
-    return Response.json(
+    return NextResponse.json(
       { error: "Dev login is disabled. Set AUTH_DEV_BYPASS=true or use development." },
       { status: 403 },
     );
@@ -19,17 +26,17 @@ export async function POST(request: Request) {
   try {
     json = await request.json();
   } catch {
-    return Response.json({ error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
-    return Response.json({ error: "Invalid payload" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
   const phone = normalizePhone(parsed.data.phone);
   if (!isValidPhone(phone)) {
-    return Response.json(
+    return NextResponse.json(
       {
         error:
           "Enter a valid phone for the selected country (e.g. Israel 0500000000 → +972500000000).",
@@ -39,10 +46,23 @@ export async function POST(request: Request) {
   }
 
   try {
-    const user = await signInWithPhoneDev(phone);
-    return Response.json({ ok: true, user });
+    const row = await findOrCreateUserByPhone(phone);
+    const { token, expiresAt } = await issueSession(row.id);
+    const user = {
+      id: row.id,
+      phone: row.phone,
+      displayName: row.displayName,
+    };
+
+    const response = NextResponse.json({ ok: true, user });
+    response.cookies.set(
+      SESSION_COOKIE,
+      token,
+      sessionCookieOptions(expiresAt),
+    );
+    return response;
   } catch (err) {
-    return Response.json(
+    return NextResponse.json(
       {
         error: formatDbError(err),
       },

@@ -20,6 +20,9 @@ export {
   destroySession,
   findOrCreateUserByPhone,
   isAuthDevBypassEnabled,
+  issueSession,
+  SESSION_COOKIE,
+  sessionCookieOptions,
 } from "./session";
 
 /**
