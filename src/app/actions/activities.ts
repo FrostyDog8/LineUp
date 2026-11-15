@@ -64,42 +64,60 @@ export async function createActivityAction(
     joinModeRaw === "open" ? "open" : ("must_approve" as const);
   const scheduleRaw = String(formData.get("scheduleMode") ?? "custom");
   const scheduleMode =
-    scheduleRaw === "weekly" ? ("weekly" as const) : ("custom" as const);
+    scheduleRaw === "weekly"
+      ? ("weekly" as const)
+      : scheduleRaw === "one_time"
+        ? ("one_time" as const)
+        : ("custom" as const);
   const defaultCapacity = Number(formData.get("defaultCapacity") ?? 18);
   const weeklyWeekdayRaw = String(formData.get("weeklyWeekday") ?? "");
   const weeklyTime = String(formData.get("weeklyTime") ?? "").trim();
   const defaultPlace = String(formData.get("defaultPlace") ?? "").trim();
-  const registrationOpensHoursBefore = Number(
-    formData.get("registrationOpensHoursBefore") ?? 48,
+  const startsAtRaw = String(formData.get("startsAt") ?? "");
+  const registrationOpensAtRaw = String(
+    formData.get("registrationOpensAt") ?? "",
+  ).trim();
+  const registrationOpensWeekdayRaw = String(
+    formData.get("registrationOpensWeekday") ?? "",
   );
-  const defaultRankMergeHoursBefore = Number(
-    formData.get("defaultRankMergeHoursBefore") ?? 24,
-  );
+  const registrationOpensTime = String(
+    formData.get("registrationOpensTime") ?? "",
+  ).trim();
 
   try {
     const weeklyWeekday =
       scheduleMode === "weekly" && weeklyWeekdayRaw !== ""
         ? Number(weeklyWeekdayRaw)
         : undefined;
+    const startsAt =
+      scheduleMode === "one_time"
+        ? parseDateTimeLocal(startsAtRaw, DEFAULT_TIMEZONE)
+        : undefined;
+    const registrationOpensWeekday =
+      scheduleMode === "weekly" && registrationOpensWeekdayRaw !== ""
+        ? Number(registrationOpensWeekdayRaw)
+        : undefined;
+    const registrationOpensAt =
+      scheduleMode !== "weekly" && registrationOpensAtRaw
+        ? parseDateTimeLocal(registrationOpensAtRaw, DEFAULT_TIMEZONE).toISOString()
+        : null;
 
     const activity = await createActivity(user.id, {
       name,
       joinMode,
       scheduleMode,
+      startsAt,
       weeklyWeekday,
       weeklyTime: scheduleMode === "weekly" ? weeklyTime : undefined,
       defaultPlace: defaultPlace || null,
       scheduleDefaults: {
-        registrationOpensHoursBefore: Number.isFinite(
-          registrationOpensHoursBefore,
-        )
-          ? registrationOpensHoursBefore
-          : 48,
-        defaultRankMergeHoursBefore: Number.isFinite(
-          defaultRankMergeHoursBefore,
-        )
-          ? defaultRankMergeHoursBefore
-          : 24,
+        registrationOpensAt,
+        registrationOpensWeekday:
+          scheduleMode === "weekly" ? registrationOpensWeekday : null,
+        registrationOpensTime:
+          scheduleMode === "weekly" ? registrationOpensTime || null : null,
+        // Rank merge stays at schema default until per-rank merge UI lands.
+        defaultRankMergeHoursBefore: 24,
       },
       defaultCapacity: Number.isFinite(defaultCapacity) ? defaultCapacity : 18,
       timezone: DEFAULT_TIMEZONE,
@@ -161,16 +179,44 @@ export async function updateSettingsAction(
   const defaultRankId = String(formData.get("defaultRankId") ?? "") || null;
   const name = String(formData.get("name") ?? "");
   const defaultPlace = String(formData.get("defaultPlace") ?? "");
-  const registrationOpensHoursBefore = Number(
-    formData.get("registrationOpensHoursBefore") ?? 48,
+  const registrationOpensAtRaw = String(
+    formData.get("registrationOpensAt") ?? "",
+  ).trim();
+  const registrationOpensWeekdayRaw = String(
+    formData.get("registrationOpensWeekday") ?? "",
   );
-  const defaultRankMergeHoursBefore = Number(
-    formData.get("defaultRankMergeHoursBefore") ?? 24,
-  );
+  const registrationOpensTime = String(
+    formData.get("registrationOpensTime") ?? "",
+  ).trim();
   const weeklyWeekdayRaw = String(formData.get("weeklyWeekday") ?? "");
   const weeklyTimeRaw = String(formData.get("weeklyTime") ?? "").trim();
 
   try {
+    const existing = await getActivityById(activityId);
+    if (!existing) throw new Error("Activity not found");
+    const registrationOpensAt = registrationOpensAtRaw
+      ? parseDateTimeLocal(
+          registrationOpensAtRaw,
+          existing.timezone,
+        ).toISOString()
+      : (existing.scheduleDefaults.registrationOpensAt ?? null);
+    const scheduleDefaults = {
+      registrationOpensHoursBefore:
+        existing.scheduleDefaults.registrationOpensHoursBefore,
+      registrationOpensAt,
+      registrationOpensWeekday:
+        registrationOpensWeekdayRaw !== ""
+          ? Number(registrationOpensWeekdayRaw)
+          : (existing.scheduleDefaults.registrationOpensWeekday ?? null),
+      registrationOpensTime:
+        registrationOpensTime ||
+        existing.scheduleDefaults.registrationOpensTime ||
+        null,
+      // Preserve stored merge default; create UI no longer sets it.
+      defaultRankMergeHoursBefore:
+        existing.scheduleDefaults.defaultRankMergeHoursBefore ?? 24,
+    };
+
     await updateActivitySettings(activityId, user.id, {
       joinMode,
       defaultCapacity: Number.isFinite(defaultCapacity)
@@ -179,18 +225,7 @@ export async function updateSettingsAction(
       defaultRankId,
       name: name || undefined,
       defaultPlace,
-      scheduleDefaults: {
-        registrationOpensHoursBefore: Number.isFinite(
-          registrationOpensHoursBefore,
-        )
-          ? registrationOpensHoursBefore
-          : 48,
-        defaultRankMergeHoursBefore: Number.isFinite(
-          defaultRankMergeHoursBefore,
-        )
-          ? defaultRankMergeHoursBefore
-          : 24,
-      },
+      scheduleDefaults,
       weeklyWeekday:
         weeklyWeekdayRaw === "" ? undefined : Number(weeklyWeekdayRaw),
       weeklyTime: weeklyTimeRaw === "" ? undefined : weeklyTimeRaw,

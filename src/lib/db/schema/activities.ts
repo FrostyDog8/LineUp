@@ -9,6 +9,7 @@ import {
 import { users } from "./users";
 
 export const scheduleModeEnum = pgEnum("schedule_mode", [
+  "one_time",
   "weekly",
   "custom",
 ]);
@@ -27,9 +28,20 @@ export const proxyConfirmScopeEnum = pgEnum("proxy_confirm_scope", [
  * Per-event overrides live on occurrences later; ranks can override merge timing by id.
  */
 export type ScheduleDefaultsJson = {
-  /** Hours before start when registration opens (activity default). */
+  /**
+   * Legacy hours-before (kept for older rows). New create UI uses
+   * registrationOpensAt (one-time/custom) or weekday+time (weekly).
+   */
   registrationOpensHoursBefore: number;
-  /** Hours before start when ranks merge into the main list (fallback). */
+  /** One-time / custom: absolute registration-open instant (ISO string). */
+  registrationOpensAt?: string | null;
+  /**
+   * Weekly: registration opens on this weekday (0=Sun…6=Sat).
+   */
+  registrationOpensWeekday?: number | null;
+  /** Weekly: registration opens at this `HH:mm` in the activity timezone. */
+  registrationOpensTime?: string | null;
+  /** Hours before start when ranks merge (fallback; not set on create UI yet). */
   defaultRankMergeHoursBefore: number;
   /** Optional per-rank merge timing: rankId -> hours before start. */
   rankMergeHoursBeforeByRankId?: Record<string, number>;
@@ -37,6 +49,9 @@ export type ScheduleDefaultsJson = {
 
 export const DEFAULT_SCHEDULE_DEFAULTS: ScheduleDefaultsJson = {
   registrationOpensHoursBefore: 48,
+  registrationOpensAt: null,
+  registrationOpensWeekday: null,
+  registrationOpensTime: null,
   defaultRankMergeHoursBefore: 24,
   rankMergeHoursBeforeByRankId: {},
 };

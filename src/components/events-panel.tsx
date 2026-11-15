@@ -31,7 +31,7 @@ type Props = {
   timezone: string;
   defaultCapacity: number;
   defaultPlace: string | null;
-  scheduleMode: "weekly" | "custom";
+  scheduleMode: "one_time" | "weekly" | "custom";
   canEdit: boolean;
   events: EventListItem[];
 };
@@ -57,7 +57,9 @@ export function EventsPanel({
         <p className="text-sm text-muted-foreground">
           {scheduleMode === "weekly"
             ? "No upcoming events yet. The weekly pattern will refill this list."
-            : "No events yet. Add a future event when you are ready."}
+            : scheduleMode === "one_time"
+              ? "No event yet. Add a future start if this one-time activity needs one."
+              : "No events yet. Add a future event when you are ready."}
         </p>
       ) : (
         <ul className="space-y-3">

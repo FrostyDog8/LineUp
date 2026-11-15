@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { getSessionUser } from "@/lib/auth";
 
-export default function HomePage() {
+export const instant = false;
+
+export default async function HomePage() {
+  const user = await getSessionUser();
+
   return (
     <div className="relative flex min-h-full flex-1 flex-col">
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-5 sm:px-6">
@@ -9,7 +14,9 @@ export default function HomePage() {
           LineUp
         </span>
         <Button asChild variant="outline" size="sm">
-          <Link href="/login">Sign in</Link>
+          <Link href={user ? "/dashboard" : "/login"}>
+            {user ? "Dashboard" : "Sign in"}
+          </Link>
         </Button>
       </header>
 
@@ -26,11 +33,15 @@ export default function HomePage() {
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Button asChild size="lg">
-            <Link href="/login">Get started</Link>
+            <Link href={user ? "/dashboard" : "/login"}>
+              {user ? "Open dashboard" : "Get started"}
+            </Link>
           </Button>
-          <Button asChild variant="secondary" size="lg">
-            <Link href="/dashboard">Open dashboard</Link>
-          </Button>
+          {!user ? (
+            <Button asChild variant="secondary" size="lg">
+              <Link href="/dashboard">Open dashboard</Link>
+            </Button>
+          ) : null}
         </div>
       </main>
     </div>

@@ -34,7 +34,10 @@ async function readErrorMessage(res: Response, fallback: string): Promise<string
 
 export async function fetchAuthConfig() {
   try {
-    const res = await fetch("/api/auth/config", { signal: authAbortSignal() });
+    const res = await fetch("/api/auth/config", {
+      credentials: "same-origin",
+      signal: authAbortSignal(),
+    });
     if (!res.ok) return { devBypass: false };
     return res.json() as Promise<{ devBypass: boolean }>;
   } catch {
@@ -48,6 +51,7 @@ export async function requestLoginChallenge(phone: string) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone }),
+      credentials: "same-origin",
       signal: authAbortSignal(),
     });
     if (!res.ok) {
@@ -65,6 +69,7 @@ export async function verifyLoginCode(phone: string, code: string) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, code }),
+      credentials: "same-origin",
       signal: authAbortSignal(),
     });
     if (!res.ok) {
@@ -82,6 +87,7 @@ export async function requestDevLogin(phone: string) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone }),
+      credentials: "same-origin",
       signal: authAbortSignal(),
     });
     if (!res.ok) {

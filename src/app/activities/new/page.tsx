@@ -28,18 +28,18 @@ export default async function NewActivityPage() {
       userLabel={user.displayName || user.phone}
       askForName={!user.displayName?.trim()}
     >
-      <Card className="max-w-lg">
+      <Card className="w-full max-w-4xl">
         <CardHeader>
           <CardTitle>New activity</CardTitle>
           <CardDescription>
-            Choose one-time or recurring, join mode, and capacity. Invite link
-            is generated on create.
+            Choose One-time, Weekly, or Custom; then join mode and capacity.
+            Invite link is generated on create.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ActionForm action={createActivityAction} className="space-y-4">
+          <ActionForm action={createActivityAction} className="space-y-6">
             <CreateActivityFields />
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3 border-t border-border pt-4">
               <FormSubmitButton pendingLabel="Creating…">Create</FormSubmitButton>
               <Button asChild variant="outline">
                 <Link href="/dashboard">Cancel</Link>

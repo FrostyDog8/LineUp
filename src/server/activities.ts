@@ -21,7 +21,7 @@ const DEFAULT_TIMEZONE = "Asia/Jerusalem";
 const DEFAULT_RANK_NAME = "member";
 const WEEKLY_WINDOW = 5;
 
-export type ScheduleMode = "weekly" | "custom";
+export type ScheduleMode = "one_time" | "weekly" | "custom";
 
 export type ActivitySummary = {
   id: string;
@@ -39,6 +39,8 @@ export type CreateActivityInput = {
   defaultCapacity: number;
   joinMode: "must_approve" | "open";
   scheduleMode: ScheduleMode;
+  /** Required when scheduleMode is one_time. */
+  startsAt?: Date;
   /** Required when scheduleMode is weekly. 0=Sun … 6=Sat. */
   weeklyWeekday?: number;
   /** Required when scheduleMode is weekly. `HH:mm`. */
@@ -142,12 +144,40 @@ export async function getActivityByInviteSlug(
 function resolveScheduleDefaults(
   partial?: Partial<ScheduleDefaultsJson>,
 ): ScheduleDefaultsJson {
+  const weekday =
+    typeof partial?.registrationOpensWeekday === "number" &&
+    partial.registrationOpensWeekday >= 0 &&
+    partial.registrationOpensWeekday <= 6
+      ? partial.registrationOpensWeekday
+      : null;
+  let time: string | null = null;
+  if (
+    typeof partial?.registrationOpensTime === "string" &&
+    partial.registrationOpensTime.trim()
+  ) {
+    parseWeeklyTime(partial.registrationOpensTime);
+    time = partial.registrationOpensTime.trim();
+  }
+  let registrationOpensAt: string | null = null;
+  if (
+    typeof partial?.registrationOpensAt === "string" &&
+    partial.registrationOpensAt.trim()
+  ) {
+    const d = new Date(partial.registrationOpensAt);
+    if (Number.isNaN(d.getTime())) {
+      throw new Error("Invalid registration open time");
+    }
+    registrationOpensAt = d.toISOString();
+  }
   return {
     registrationOpensHoursBefore:
       typeof partial?.registrationOpensHoursBefore === "number" &&
       partial.registrationOpensHoursBefore >= 0
         ? partial.registrationOpensHoursBefore
         : DEFAULT_SCHEDULE_DEFAULTS.registrationOpensHoursBefore,
+    registrationOpensAt,
+    registrationOpensWeekday: weekday,
+    registrationOpensTime: time,
     defaultRankMergeHoursBefore:
       typeof partial?.defaultRankMergeHoursBefore === "number" &&
       partial.defaultRankMergeHoursBefore >= 0
@@ -168,7 +198,25 @@ export async function createActivity(
     throw new Error("Default capacity must be at least 1");
   }
 
+  if (input.scheduleMode === "one_time" && !input.startsAt) {
+    throw new Error("One-time activities need a start time");
+  }
+  if (input.startsAt) {
+    assertFutureStart(input.startsAt);
+  }
+
   const scheduleDefaults = resolveScheduleDefaults(input.scheduleDefaults);
+  if (input.scheduleMode === "weekly") {
+    if (
+      scheduleDefaults.registrationOpensWeekday == null ||
+      !scheduleDefaults.registrationOpensTime
+    ) {
+      throw new Error("Pick when registration opens (day and time)");
+    }
+  } else if (!scheduleDefaults.registrationOpensAt) {
+    throw new Error("Pick when registration opens (date and time)");
+  }
+
   const defaultPlace = input.defaultPlace?.trim() || null;
   let weeklyWeekday: number | null = null;
   let weeklyTime: string | null = null;
@@ -247,9 +295,17 @@ export async function createActivity(
       status: "active",
     });
 
-    // Weekly: auto-fill the next 5 future events from the pattern.
-    // Custom: leave the events list empty (one-offs = add a single future event).
-    if (
+    // One-time: single future event. Weekly: next ~5 from pattern.
+    // Custom: empty list — owner adds events after create.
+    if (input.scheduleMode === "one_time" && input.startsAt) {
+      assertFutureStart(input.startsAt);
+      await tx.insert(occurrences).values({
+        activityId: activity.id,
+        startsAt: input.startsAt,
+        capacity: null,
+        place: defaultPlace,
+      });
+    } else if (
       input.scheduleMode === "weekly" &&
       weeklyWeekday != null &&
       weeklyTime

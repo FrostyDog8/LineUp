@@ -58,7 +58,9 @@ export default async function ActivityPage({ params }: Props) {
   const scheduleLabel =
     activity.scheduleMode === "weekly"
       ? `weekly · ${weekdayLabel(activity.weeklyWeekday)}${activity.weeklyTime ? ` ${activity.weeklyTime}` : ""}`
-      : "custom";
+      : activity.scheduleMode === "one_time"
+        ? "one-time"
+        : "custom";
   const joinLabel =
     activity.joinMode === "open" ? "open join" : "approval required";
 
@@ -139,7 +141,9 @@ export default async function ActivityPage({ params }: Props) {
             <CardDescription>
               {activity.scheduleMode === "weekly"
                 ? "Weekly pattern keeps about five future events topped up. Capacity and place can override activity defaults."
-                : "Custom schedule — add future events as needed. Defaults prefill when you add an event."}
+                : activity.scheduleMode === "one_time"
+                  ? "One-time activity — a single event. Capacity and place can override activity defaults."
+                  : "Custom schedule — add future events as needed. Defaults prefill when you add an event."}
             </CardDescription>
           </CardHeader>
           <CardContent>

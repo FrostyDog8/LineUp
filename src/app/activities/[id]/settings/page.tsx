@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getSessionUser } from "@/lib/auth";
+import { formatDateTimeLocal } from "@/lib/datetime";
 import { WEEKDAY_OPTIONS, weekdayLabel } from "@/lib/schedule-defaults";
 import { getActivityById } from "@/server/activities";
 import { listMembers } from "@/server/memberships";
@@ -101,48 +102,64 @@ export default async function ActivitySettingsPage({ params }: Props) {
                   placeholder="Venue or location"
                 />
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              {activity.scheduleMode === "weekly" ? (
                 <div className="space-y-2">
-                  <Label htmlFor="registrationOpensHoursBefore">
-                    Registration opens
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="registrationOpensHoursBefore"
-                      name="registrationOpensHoursBefore"
-                      type="number"
-                      min={0}
+                  <Label>Registration opens</Label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <select
+                      id="registrationOpensWeekday"
+                      name="registrationOpensWeekday"
                       defaultValue={
-                        activity.scheduleDefaults.registrationOpensHoursBefore
+                        activity.scheduleDefaults.registrationOpensWeekday ?? 1
+                      }
+                      className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
+                      required
+                    >
+                      {WEEKDAY_OPTIONS.map((d) => (
+                        <option key={d.value} value={d.value}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      id="registrationOpensTime"
+                      name="registrationOpensTime"
+                      type="time"
+                      defaultValue={
+                        activity.scheduleDefaults.registrationOpensTime ??
+                        "12:00"
                       }
                       required
                     />
-                    <span className="whitespace-nowrap text-xs text-muted-foreground">
-                      hours before
-                    </span>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Weekly default day + time. Events can override later.
+                  </p>
                 </div>
+              ) : (
                 <div className="space-y-2">
-                  <Label htmlFor="defaultRankMergeHoursBefore">
-                    Rank merge default
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="defaultRankMergeHoursBefore"
-                      name="defaultRankMergeHoursBefore"
-                      type="number"
-                      min={0}
-                      defaultValue={
-                        activity.scheduleDefaults.defaultRankMergeHoursBefore
-                      }
-                      required
-                    />
-                    <span className="whitespace-nowrap text-xs text-muted-foreground">
-                      hours before
-                    </span>
-                  </div>
+                  <Label htmlFor="registrationOpensAt">Registration opens</Label>
+                  <Input
+                    id="registrationOpensAt"
+                    name="registrationOpensAt"
+                    type="datetime-local"
+                    defaultValue={
+                      activity.scheduleDefaults.registrationOpensAt
+                        ? formatDateTimeLocal(
+                            new Date(
+                              activity.scheduleDefaults.registrationOpensAt,
+                            ),
+                            activity.timezone,
+                          )
+                        : ""
+                    }
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Date and time when registration opens.
+                  </p>
                 </div>
-              </div>
+              )}
               {activity.scheduleMode === "weekly" ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -203,7 +220,9 @@ export default async function ActivitySettingsPage({ params }: Props) {
                 Schedule:{" "}
                 {activity.scheduleMode === "weekly"
                   ? `weekly · ${weekdayLabel(activity.weeklyWeekday)}${activity.weeklyTime ? ` ${activity.weeklyTime}` : ""}`
-                  : "custom"}
+                  : activity.scheduleMode === "one_time"
+                    ? "one-time"
+                    : "custom"}
                 . Timezone {activity.timezone} (server default; not editable
                 here yet).
               </p>
