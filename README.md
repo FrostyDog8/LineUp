@@ -2,7 +2,7 @@
 
 Activity registration for teams and clubs — fair lists, ranks, and capacity without the WhatsApp race.
 
-**M1 foundation scaffold** (this PR): Next.js App Router, Drizzle schema, auth/dashboard stubs, analytics hook. Full registration engine, WhatsApp group bot, and Hebrew/RTL are out of scope.
+**M2** ships activities & membership: create/join, approve/open, ranks, thin managers, owner settings, and **dev login** with real session cookies.
 
 ## Stack
 
@@ -10,7 +10,7 @@ Activity registration for teams and clubs — fair lists, ranks, and capacity wi
 | --- | --- |
 | App | Next.js (App Router) + TypeScript + Tailwind + shadcn/ui basics |
 | DB | Supabase Postgres (`gehjyxyciymdwywjyfyx`, `eu-central-1`) + Drizzle ORM |
-| Auth | Better Auth scaffold + phone OTP / WhatsApp magic-link **adapters (stubbed)** |
+| Auth | Phone identity + httpOnly session cookies; Better Auth scaffold retained; Twilio/WhatsApp adapters stubbed |
 | Hosting | Vercel (planned) |
 | Analytics | Stub module; loads GA only if `NEXT_PUBLIC_GA_ID` is set |
 
@@ -40,6 +40,8 @@ Fill in (from [Supabase project dashboard](https://supabase.com/dashboard/projec
 | `SUPABASE_SERVICE_ROLE_KEY` | Project Settings → API → `service_role` (server only) |
 | `BETTER_AUTH_SECRET` | Generate a long random string (`openssl rand -base64 32`) |
 | `NEXT_PUBLIC_GA_ID` | Leave empty until Google Analytics is added |
+| `AUTH_DEV_BYPASS` | Optional. Set `true` to allow phone → session without Twilio (also on automatically when `NODE_ENV=development`) |
+| `NEXT_PUBLIC_APP_URL` | Optional. Used for invite links (defaults to `http://localhost:3000`) |
 
 Optional later (auth delivery spike): `AUTH_DELIVERY`, Twilio Verify, WhatsApp Cloud API vars — see `.env.example`.
 
@@ -53,16 +55,9 @@ With `DATABASE_URL` set:
 npm run db:migrate
 ```
 
-Or generate/push during development:
+M1 domain schema (`drizzle/0000_init_lineup_domain.sql`) is already applied on the LineUp Supabase project. M2 uses that schema (no new tables).
 
-```bash
-npm run db:generate
-npm run db:push
-```
-
-SQL for the initial domain schema also lives in `drizzle/0000_init_lineup_domain.sql` if you prefer applying it from the Supabase SQL editor.
-
-**RLS note:** Domain tables were created without Row Level Security. The app talks to Postgres via `DATABASE_URL` (Drizzle), not the anon key. Optional hardening SQL (enable RLS, deny PostgREST by default) is in `drizzle/manual/enable_rls.sql` — review before applying.
+**RLS note:** Domain tables were created without Row Level Security. The app talks to Postgres via `DATABASE_URL` (Drizzle), not the anon key. Optional hardening SQL is in `drizzle/manual/enable_rls.sql`.
 
 ### 4. Run locally
 
@@ -72,10 +67,22 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-- `/` — LineUp landing
-- `/login` — phone OTP / magic-link UI (adapters stubbed without Twilio/WhatsApp)
-- `/dashboard` — personal “my activities” shell (empty data)
-- `/activities/new` · `/activities/join` — create/join UI stubs
+## How to test M2 (local)
+
+1. Ensure `.env.local` has a working `DATABASE_URL` and `BETTER_AUTH_SECRET`.
+2. Dev login is on in development (`NODE_ENV=development`). Or set `AUTH_DEV_BYPASS=true`.
+3. Open `/login` → enter an E.164 phone (e.g. `+972501111111`) → **Dev sign-in**.
+4. **Create** an activity (`/activities/new`) with must-approve or open join.
+5. Copy the invite code from the activity page.
+6. Sign out → sign in as a second phone → **Join** with the code.
+7. As owner: approve (must-approve) or see immediate membership (open); open **Settings** for join mode / capacity / ranks / ownership transfer; promote a member to **manager** with approve-joins / change-ranks toggles.
+
+Routes:
+
+- `/` — landing
+- `/login` — phone sign-in (dev bypass or OTP stub)
+- `/dashboard` — activities you own or belong to
+- `/activities/new` · `/activities/join` · `/activities/[id]` · `/activities/[id]/settings`
 
 ## Scripts
 
@@ -92,21 +99,22 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Repo layout (high level)
 
 ```
-src/app/           # App Router pages + auth API stubs
-src/components/    # UI (shadcn-style) + dashboard shell
+src/app/           # App Router pages + auth API + server actions
+src/components/    # UI (shadcn-style) + dashboard / member panels
 src/lib/db/        # Drizzle client + domain schema
-src/lib/auth/      # Better Auth + AuthDelivery adapters
+src/lib/auth/      # Sessions, phone helpers, AuthDelivery adapters
 src/lib/analytics/ # GA no-op unless NEXT_PUBLIC_GA_ID is set
-src/server/        # Domain modules (stubs → real logic in M2+)
+src/server/        # Domain modules (activities, memberships, ranks, permissions)
 drizzle/           # SQL migrations
 ```
 
-## Out of scope (this scaffold)
+## Out of scope (later milestones)
 
-- Full multi-phase registration engine
-- WhatsApp **group** status bot
-- Real Twilio / WhatsApp credentials in-repo
-- Hebrew / RTL UI
+- Full multi-phase registration engine / waitlist / auto-promote
+- Proxy-confirm, guests, manual list edit (M4)
+- WhatsApp group status bot / real Twilio
+- Hebrew / RTL
+- Label polish
 
 ## License
 

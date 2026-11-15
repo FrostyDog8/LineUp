@@ -5,3 +5,4 @@ export * from "./memberships";
 export * from "./permissions";
 export * from "./occurrences";
 export * from "./registration";
+export * from "./relations";

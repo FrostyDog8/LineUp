@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { requestLoginChallenge, verifyLoginCode } from "@/lib/auth/client";
+import { useEffect, useState } from "react";
+import {
+  fetchAuthConfig,
+  requestDevLogin,
+  requestLoginChallenge,
+  verifyLoginCode,
+} from "@/lib/auth/client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,11 +21,17 @@ import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
   const [phone, setPhone] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [devBypass, setDevBypass] = useState(false);
+
+  useEffect(() => {
+    void fetchAuthConfig().then((cfg) => setDevBypass(cfg.devBypass));
+  }, []);
 
   async function onRequestChallenge(e: React.FormEvent) {
     e.preventDefault();
@@ -32,11 +43,26 @@ export default function LoginPage() {
       setStep("code");
       setMessage(
         result.stubbed
-          ? "Delivery adapter stubbed (no Twilio/WhatsApp credentials). Enter any 6-digit code to continue the UI flow."
+          ? "Delivery adapter stubbed (no Twilio/WhatsApp credentials). Enter any 6-digit code to continue when AUTH_DEV_BYPASS or development is on."
           : "Check your phone for a code or magic link.",
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function onDevLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
+    setPending(true);
+    try {
+      await requestDevLogin(phone.trim(), displayName.trim() || undefined);
+      window.location.href = "/dashboard";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Dev login failed");
     } finally {
       setPending(false);
     }
@@ -47,12 +73,7 @@ export default function LoginPage() {
     setError(null);
     setPending(true);
     try {
-      const result = await verifyLoginCode(phone.trim(), code.trim());
-      setMessage(
-        result.stubbed
-          ? "Verify stubbed — session wiring lands with Better Auth + DB. Opening dashboard."
-          : "Signed in.",
-      );
+      await verifyLoginCode(phone.trim(), code.trim());
       window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
@@ -73,13 +94,18 @@ export default function LoginPage() {
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
           <CardDescription>
-            Phone OTP preferred when affordable; otherwise WhatsApp magic link.
-            Adapters are stubbed until credentials are configured.
+            Phone is your account key.{" "}
+            {devBypass
+              ? "Dev login is enabled — skip OTP with the button below."
+              : "Use OTP / magic link when delivery credentials are configured."}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {step === "phone" ? (
-            <form onSubmit={onRequestChallenge} className="space-y-4">
+            <form
+              onSubmit={devBypass ? onDevLogin : onRequestChallenge}
+              className="space-y-4"
+            >
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone (E.164)</Label>
                 <Input
@@ -93,9 +119,39 @@ export default function LoginPage() {
                   autoComplete="tel"
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={pending}>
-                {pending ? "Sending…" : "Continue"}
-              </Button>
+              {devBypass ? (
+                <div className="space-y-2">
+                  <Label htmlFor="displayName">Display name (optional)</Label>
+                  <Input
+                    id="displayName"
+                    name="displayName"
+                    placeholder="Omer"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    autoComplete="nickname"
+                  />
+                </div>
+              ) : null}
+              {devBypass ? (
+                <Button type="submit" className="w-full" disabled={pending}>
+                  {pending ? "Signing in…" : "Dev sign-in"}
+                </Button>
+              ) : (
+                <Button type="submit" className="w-full" disabled={pending}>
+                  {pending ? "Sending…" : "Continue"}
+                </Button>
+              )}
+              {devBypass ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={pending}
+                  onClick={onRequestChallenge}
+                >
+                  Use OTP flow instead
+                </Button>
+              ) : null}
             </form>
           ) : (
             <form onSubmit={onVerify} className="space-y-4">

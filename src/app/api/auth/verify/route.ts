@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  createUserSession,
+  findOrCreateUserByPhone,
+  isAuthDevBypassEnabled,
+} from "@/lib/auth";
+import { isValidPhone, normalizePhone } from "@/lib/auth/phone";
 
 const bodySchema = z.object({
   phone: z.string().min(8).max(20),
@@ -6,8 +12,9 @@ const bodySchema = z.object({
 });
 
 /**
- * Verify stub — accepts any code while OTP/magic-link adapters are unwired.
- * Replace with Better Auth / challenge table checks in M1 exit.
+ * Verify OTP / magic-link code.
+ * While Twilio is unwired, AUTH_DEV_BYPASS (or development) accepts any code
+ * and creates a real session cookie against the sessions table.
  */
 export async function POST(request: Request) {
   let json: unknown;
@@ -22,9 +29,38 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  return Response.json({
-    ok: true,
-    stubbed: true,
-    phone: parsed.data.phone,
-  });
+  const phone = normalizePhone(parsed.data.phone);
+  if (!isValidPhone(phone)) {
+    return Response.json(
+      { error: "Use an E.164 phone like +972501234567" },
+      { status: 400 },
+    );
+  }
+
+  if (!isAuthDevBypassEnabled()) {
+    return Response.json(
+      {
+        error:
+          "OTP verification is not wired yet. Enable AUTH_DEV_BYPASS=true for local testing.",
+      },
+      { status: 501 },
+    );
+  }
+
+  try {
+    const user = await findOrCreateUserByPhone(phone);
+    await createUserSession(user.id);
+    return Response.json({
+      ok: true,
+      stubbed: true,
+      phone: user.phone,
+    });
+  } catch (err) {
+    return Response.json(
+      {
+        error: err instanceof Error ? err.message : "Could not create session",
+      },
+      { status: 500 },
+    );
+  }
 }

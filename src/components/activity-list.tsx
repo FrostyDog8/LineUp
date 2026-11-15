@@ -19,7 +19,7 @@ export function ActivityList({ activities }: { activities: ActivitySummary[] }) 
           No activities yet
         </h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-          Your personal dashboard will list activities you own, manage, or have
+          Your personal dashboard lists activities you own, manage, or have
           joined. Create one or join with an invite to get started.
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
@@ -48,7 +48,8 @@ export function ActivityList({ activities }: { activities: ActivitySummary[] }) 
             <CardHeader>
               <CardTitle>{activity.name}</CardTitle>
               <CardDescription>
-                {activity.typeText || "Activity"} · {activity.role} ·{" "}
+                {activity.typeText || "Activity"} · {activity.role}
+                {activity.status === "requested" ? " · pending" : ""} ·{" "}
                 {activity.timezone}
               </CardDescription>
             </CardHeader>
