@@ -48,9 +48,10 @@ export function ActivityList({ activities }: { activities: ActivitySummary[] }) 
             <CardHeader>
               <CardTitle>{activity.name}</CardTitle>
               <CardDescription>
-                {activity.typeText || "Activity"} · {activity.role}
+                {activity.scheduleMode === "one_time" ? "one-time" : "recurring"}{" "}
+                · {activity.role}
                 {activity.status === "requested" ? " · pending" : ""} ·{" "}
-                {activity.timezone}
+                {activity.joinMode === "open" ? "open" : "approval"}
               </CardDescription>
             </CardHeader>
             <CardContent>

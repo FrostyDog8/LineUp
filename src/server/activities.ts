@@ -5,9 +5,13 @@ import {
   activities,
   managerPermissions,
   memberships,
+  occurrences,
   ranks,
 } from "@/lib/db/schema";
 import { getActivityAccess } from "./permissions";
+
+const DEFAULT_TIMEZONE = "Asia/Jerusalem";
+const DEFAULT_RANK_NAME = "member";
 
 export type ActivitySummary = {
   id: string;
@@ -16,15 +20,20 @@ export type ActivitySummary = {
   role: "owner" | "manager" | "participant";
   timezone: string;
   joinMode: "must_approve" | "open";
+  scheduleMode: "one_time" | "recurring_simple";
   status: "requested" | "active" | "left" | "removed";
 };
 
 export type CreateActivityInput = {
   name: string;
-  typeText: string;
-  timezone: string;
   defaultCapacity: number;
   joinMode: "must_approve" | "open";
+  scheduleMode: "one_time" | "recurring_simple";
+  /** Required when scheduleMode is one_time. */
+  startsAt?: Date;
+  /** Server default Asia/Jerusalem when omitted. */
+  timezone?: string;
+  typeText?: string;
   defaultRankName?: string;
 };
 
@@ -54,6 +63,7 @@ export async function listMyActivities(
       role: memberships.role,
       timezone: activities.timezone,
       joinMode: activities.joinMode,
+      scheduleMode: activities.scheduleMode,
       status: memberships.status,
     })
     .from(memberships)
@@ -113,17 +123,25 @@ export async function createActivity(
   if (input.defaultCapacity < 1) {
     throw new Error("Default capacity must be at least 1");
   }
+  if (input.scheduleMode === "one_time" && !input.startsAt) {
+    throw new Error("One-time activities need a start time");
+  }
 
   const inviteSlug = generateInviteSlug();
-  const defaultRankName = (input.defaultRankName ?? "Regular").trim() || "Regular";
+  const defaultRankName =
+    (input.defaultRankName ?? DEFAULT_RANK_NAME).trim() || DEFAULT_RANK_NAME;
+  const timezone =
+    (input.timezone?.trim() || DEFAULT_TIMEZONE).trim() || DEFAULT_TIMEZONE;
+  const typeText = (input.typeText ?? "").trim();
 
   const created = await db.transaction(async (tx) => {
     const [activity] = await tx
       .insert(activities)
       .values({
         name,
-        typeText: input.typeText.trim(),
-        timezone: input.timezone.trim() || "UTC",
+        typeText,
+        timezone,
+        scheduleMode: input.scheduleMode,
         joinMode: input.joinMode,
         defaultCapacity: input.defaultCapacity,
         ownerUserId: userId,
@@ -163,6 +181,16 @@ export async function createActivity(
       status: "active",
     });
 
+    // One-time: materialize a single occurrence so registration can attach later.
+    // Recurring: leave the events list empty until the owner adds events.
+    if (input.scheduleMode === "one_time" && input.startsAt) {
+      await tx.insert(occurrences).values({
+        activityId: activity.id,
+        startsAt: input.startsAt,
+        capacity: null,
+      });
+    }
+
     return {
       ...activity,
       defaultRankId: defaultRank.id,
@@ -189,8 +217,6 @@ export type UpdateActivitySettingsInput = {
   defaultCapacity?: number;
   defaultRankId?: string | null;
   name?: string;
-  typeText?: string;
-  timezone?: string;
 };
 
 export async function updateActivitySettings(
@@ -230,10 +256,6 @@ export async function updateActivitySettings(
     const name = input.name.trim();
     if (!name) throw new Error("Activity name is required");
     patch.name = name;
-  }
-  if (input.typeText !== undefined) patch.typeText = input.typeText.trim();
-  if (input.timezone !== undefined) {
-    patch.timezone = input.timezone.trim() || "UTC";
   }
 
   await db.update(activities).set(patch).where(eq(activities.id, activityId));

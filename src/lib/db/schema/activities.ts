@@ -26,7 +26,7 @@ export const activities = pgTable("activities", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
   typeText: text("type_text").notNull().default(""),
-  timezone: text("timezone").notNull().default("UTC"),
+  timezone: text("timezone").notNull().default("Asia/Jerusalem"),
   scheduleMode: scheduleModeEnum("schedule_mode")
     .notNull()
     .default("one_time"),
