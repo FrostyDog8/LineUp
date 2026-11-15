@@ -1,13 +1,10 @@
 import { z } from "zod";
 import { startLoginChallenge } from "@/lib/auth";
 import { getAuthDelivery } from "@/lib/auth/delivery";
+import { isValidPhone, normalizePhone } from "@/lib/auth/phone";
 
 const bodySchema = z.object({
-  phone: z
-    .string()
-    .min(8)
-    .max(20)
-    .regex(/^\+?[0-9\s-]+$/, "Use an E.164-style phone number"),
+  phone: z.string().min(8).max(32),
 });
 
 export async function POST(request: Request) {
@@ -26,8 +23,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const phone = parsed.data.phone.replace(/[\s-]/g, "");
-  const normalized = phone.startsWith("+") ? phone : `+${phone}`;
+  const normalized = normalizePhone(parsed.data.phone);
+  if (!isValidPhone(normalized)) {
+    return Response.json(
+      {
+        error:
+          "Enter a valid phone for the selected country (e.g. Israel 0526257840 → +972526257840).",
+      },
+      { status: 400 },
+    );
+  }
+
   const delivery = getAuthDelivery();
   const result = await startLoginChallenge(normalized);
 

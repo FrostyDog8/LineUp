@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { isAuthDevBypassEnabled, signInWithPhoneDev } from "@/lib/auth";
 import { isValidPhone, normalizePhone } from "@/lib/auth/phone";
+import { formatDbError } from "@/lib/db";
 
 const bodySchema = z.object({
-  phone: z.string().min(8).max(20),
+  phone: z.string().min(8).max(32),
   displayName: z.string().max(80).optional().nullable(),
 });
 
@@ -30,7 +31,10 @@ export async function POST(request: Request) {
   const phone = normalizePhone(parsed.data.phone);
   if (!isValidPhone(phone)) {
     return Response.json(
-      { error: "Use an E.164 phone like +972501234567" },
+      {
+        error:
+          "Enter a valid phone for the selected country (e.g. Israel 0526257840 → +972526257840).",
+      },
       { status: 400 },
     );
   }
@@ -44,8 +48,7 @@ export async function POST(request: Request) {
   } catch (err) {
     return Response.json(
       {
-        error:
-          err instanceof Error ? err.message : "Could not create session",
+        error: formatDbError(err),
       },
       { status: 500 },
     );

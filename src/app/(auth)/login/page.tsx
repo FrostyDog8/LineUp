@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import type { CountryCode } from "libphonenumber-js";
 import {
   fetchAuthConfig,
   requestDevLogin,
   requestLoginChallenge,
   verifyLoginCode,
 } from "@/lib/auth/client";
+import { DEFAULT_COUNTRY, toE164 } from "@/lib/auth/phone";
+import { PhoneInput, useDefaultPhoneCountry } from "@/components/phone-input";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,7 +23,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
-  const [phone, setPhone] = useState("");
+  const geo = useDefaultPhoneCountry();
+  const [country, setCountry] = useState<CountryCode>(DEFAULT_COUNTRY);
+  const [countryTouched, setCountryTouched] = useState(false);
+  const [nationalNumber, setNationalNumber] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"phone" | "code">("phone");
@@ -28,18 +34,32 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [devBypass, setDevBypass] = useState(false);
+  const [signedE164, setSignedE164] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchAuthConfig().then((cfg) => setDevBypass(cfg.devBypass));
   }, []);
 
-  async function onRequestChallenge(e: React.FormEvent) {
-    e.preventDefault();
+  useEffect(() => {
+    if (geo.ready && !countryTouched) setCountry(geo.country);
+  }, [geo.ready, geo.country, countryTouched]);
+
+  function resolveE164(): string | null {
+    return toE164(nationalNumber, country);
+  }
+
+  async function startChallenge() {
     setError(null);
     setMessage(null);
+    const phone = resolveE164();
+    if (!phone) {
+      setError("Enter a valid phone number for the selected country.");
+      return;
+    }
     setPending(true);
     try {
-      const result = await requestLoginChallenge(phone.trim());
+      const result = await requestLoginChallenge(phone);
+      setSignedE164(phone);
       setStep("code");
       setMessage(
         result.stubbed
@@ -53,13 +73,23 @@ export default function LoginPage() {
     }
   }
 
+  async function onRequestChallenge(e: React.FormEvent) {
+    e.preventDefault();
+    await startChallenge();
+  }
+
   async function onDevLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setMessage(null);
+    const phone = resolveE164();
+    if (!phone) {
+      setError("Enter a valid phone number for the selected country.");
+      return;
+    }
     setPending(true);
     try {
-      await requestDevLogin(phone.trim(), displayName.trim() || undefined);
+      await requestDevLogin(phone, displayName.trim() || undefined);
       window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Dev login failed");
@@ -71,9 +101,14 @@ export default function LoginPage() {
   async function onVerify(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    const phone = signedE164 ?? resolveE164();
+    if (!phone) {
+      setError("Enter a valid phone number for the selected country.");
+      return;
+    }
     setPending(true);
     try {
-      await verifyLoginCode(phone.trim(), code.trim());
+      await verifyLoginCode(phone, code.trim());
       window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
@@ -106,19 +141,17 @@ export default function LoginPage() {
               onSubmit={devBypass ? onDevLogin : onRequestChallenge}
               className="space-y-4"
             >
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone (E.164)</Label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  placeholder="+972501234567"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  required
-                  autoComplete="tel"
-                />
-              </div>
+              <PhoneInput
+                nationalNumber={nationalNumber}
+                country={country}
+                onNationalNumberChange={setNationalNumber}
+                onCountryChange={(next) => {
+                  setCountryTouched(true);
+                  setCountry(next);
+                }}
+                disabled={pending}
+                required
+              />
               {devBypass ? (
                 <div className="space-y-2">
                   <Label htmlFor="displayName">Display name (optional)</Label>
@@ -147,7 +180,7 @@ export default function LoginPage() {
                   variant="outline"
                   className="w-full"
                   disabled={pending}
-                  onClick={onRequestChallenge}
+                  onClick={() => void startChallenge()}
                 >
                   Use OTP flow instead
                 </Button>
