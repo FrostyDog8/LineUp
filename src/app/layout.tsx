@@ -18,7 +18,7 @@ const sourceSans = Source_Sans_3({
 export const metadata: Metadata = {
   title: "LineUp",
   description:
-    "Activity registration for teams and clubs — fair lists, ranks, and capacity without the WhatsApp race.",
+    "Activity registration for teams and clubs — fair lists, ranks, and spots without the WhatsApp race.",
 };
 
 export default function RootLayout({

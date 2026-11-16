@@ -17,8 +17,13 @@ export const ranks = pgTable("ranks", {
   /** Legacy column; UI no longer uses priority for merge order. */
   sortPriority: integer("sort_priority").notNull().default(100),
   isDefault: boolean("is_default").notNull().default(false),
-  /** When this rank merges into the main list: scheduled datetime/day or manual. */
-  mergeMode: text("merge_mode").notNull().default("manual"),
+  /**
+   * When this rank becomes main-list eligible:
+   * - from_open: at registration open
+   * - scheduled: at merge_at / weekday+time (or Manual merge)
+   * - manual: only via Manual merge
+   */
+  mergeMode: text("merge_mode").notNull().default("from_open"),
   /** Absolute merge instant when mergeMode is scheduled (one-time / custom). */
   mergeAt: timestamp("merge_at", { withTimezone: true }),
   /** Weekly: merge weekday 0=Sun…6=Sat when mergeMode is scheduled. */

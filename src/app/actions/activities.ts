@@ -7,6 +7,7 @@ import { parseInviteInput } from "@/lib/invite";
 import { parseDateTimeLocal } from "@/lib/datetime";
 import {
   createActivity,
+  deleteActivity,
   getActivityById,
   transferOwnership,
   updateActivitySettings,
@@ -350,6 +351,22 @@ export async function transferOwnershipAction(
   }
 }
 
+export async function deleteActivityAction(
+  activityId: string,
+): Promise<ActionResult> {
+  const user = await requireSessionUser();
+  try {
+    await deleteActivity(activityId, user.id);
+    revalidatePath("/dashboard");
+    return { ok: true, message: "Activity deleted." };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not delete activity",
+    };
+  }
+}
+
 export async function approveJoinAction(
   activityId: string,
   membershipId: string,
@@ -434,6 +451,7 @@ export async function createRankAction(
   const user = await requireSessionUser();
   try {
     await createRank(activityId, user.id, { name: "New rank" });
+    revalidatePath(`/activities/${activityId}/ranks`);
     revalidatePath(`/activities/${activityId}/settings`);
     return { ok: true, message: "Rank created." };
   } catch (err) {
@@ -452,8 +470,13 @@ export async function updateRankAction(
 ): Promise<ActionResult> {
   const user = await requireSessionUser();
   const name = String(formData.get("name") ?? "");
-  const mergeModeRaw = String(formData.get("mergeMode") ?? "manual");
-  const mergeMode = mergeModeRaw === "scheduled" ? "scheduled" : "manual";
+  const mergeModeRaw = String(formData.get("mergeMode") ?? "from_open");
+  const mergeMode =
+    mergeModeRaw === "scheduled"
+      ? ("scheduled" as const)
+      : mergeModeRaw === "manual"
+        ? ("manual" as const)
+        : ("from_open" as const);
   const mergeAtRaw = String(formData.get("mergeAt") ?? "").trim();
   const mergeWeekdayRaw = String(formData.get("mergeWeekday") ?? "").trim();
   const mergeTimeRaw = String(formData.get("mergeTime") ?? "").trim();
@@ -498,6 +521,7 @@ export async function updateRankAction(
       mergeWeekday: weekly ? mergeWeekday : null,
       mergeTime: weekly ? mergeTime : null,
     });
+    revalidatePath(`/activities/${activityId}/ranks`);
     revalidatePath(`/activities/${activityId}/settings`);
     return { ok: true };
   } catch (err) {
@@ -516,6 +540,7 @@ export async function openRegistrationForOccurrenceAction(
   try {
     await openRegistrationForOccurrence(activityId, user.id, occurrenceId);
     revalidatePath(`/activities/${activityId}`);
+    revalidatePath(`/activities/${activityId}/events/${occurrenceId}`);
     return { ok: true, message: "Registration opened." };
   } catch (err) {
     return {
@@ -536,6 +561,7 @@ export async function deleteRankAction(
   const user = await requireSessionUser();
   try {
     await deleteRank(activityId, user.id, rankId);
+    revalidatePath(`/activities/${activityId}/ranks`);
     revalidatePath(`/activities/${activityId}/settings`);
     return { ok: true, message: "Rank deleted." };
   } catch (err) {

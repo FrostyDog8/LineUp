@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -45,7 +44,7 @@ export default async function ActivityMembersPage({ params }: Props) {
   return (
     <DashboardShell
       title="Members"
-      subtitle={activity.name}
+      subtitle={null}
       userLabel={user.displayName || user.phone}
       askForName={!user.displayName?.trim()}
       compact
@@ -55,9 +54,14 @@ export default async function ActivityMembersPage({ params }: Props) {
           <Link href={`/activities/${id}`}>Back to activity</Link>
         </Button>
         {access.canManageSettings ? (
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/activities/${id}/settings`}>Settings</Link>
-          </Button>
+          <>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/activities/${id}/ranks`}>Ranks</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/activities/${id}/settings`}>Default settings</Link>
+            </Button>
+          </>
         ) : null}
       </div>
 
@@ -65,7 +69,6 @@ export default async function ActivityMembersPage({ params }: Props) {
         <Card className="mb-4">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Join requests</CardTitle>
-            <CardDescription>Approve and set rank.</CardDescription>
           </CardHeader>
           <CardContent>
             <JoinRequestsPanel
@@ -80,15 +83,7 @@ export default async function ActivityMembersPage({ params }: Props) {
       ) : null}
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg">Active members</CardTitle>
-          <CardDescription>
-            {access.canChangeRanks || access.canPromoteManagers
-              ? "Manage ranks and managers below."
-              : "People in this activity."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-4">
           <MembersPanel
             activityId={id}
             members={members}

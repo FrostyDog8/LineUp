@@ -197,7 +197,7 @@ export async function createActivity(
   const name = input.name.trim();
   if (!name) throw new Error("Activity name is required");
   if (input.defaultCapacity < 1) {
-    throw new Error("Default capacity must be at least 1");
+    throw new Error("Default spots must be at least 1");
   }
 
   if (input.scheduleMode === "one_time" && !input.startsAt) {
@@ -275,6 +275,7 @@ export async function createActivity(
         name: defaultRankName,
         sortPriority: 10,
         isDefault: true,
+        mergeMode: "from_open",
       })
       .returning();
     if (!defaultRank) throw new Error("Failed to create default rank");
@@ -284,6 +285,7 @@ export async function createActivity(
       name: "New",
       sortPriority: 100,
       isDefault: false,
+      mergeMode: "manual",
     });
 
     await tx
@@ -371,7 +373,7 @@ export async function updateActivitySettings(
   if (input.joinMode) patch.joinMode = input.joinMode;
   if (input.defaultCapacity !== undefined) {
     if (input.defaultCapacity < 1) {
-      throw new Error("Default capacity must be at least 1");
+      throw new Error("Default spots must be at least 1");
     }
     patch.defaultCapacity = input.defaultCapacity;
   }
@@ -425,6 +427,33 @@ export async function updateActivitySettings(
   const updated = await getActivityById(activityId);
   if (!updated) throw new Error("Activity not found");
   return updated;
+}
+
+export async function deleteActivity(
+  activityId: string,
+  actorUserId: string,
+): Promise<void> {
+  const access = await getActivityAccess(activityId, actorUserId);
+  if (!access?.canManageSettings) {
+    throw new Error("Only the owner can delete this activity");
+  }
+
+  const db = requireDb();
+  const existing = await getActivityById(activityId);
+  if (!existing) throw new Error("Activity not found");
+
+  await db.transaction(async (tx) => {
+    // Clear rank FKs so cascade-deleting ranks is not blocked by memberships.
+    await tx
+      .update(memberships)
+      .set({ rankId: null, updatedAt: new Date() })
+      .where(eq(memberships.activityId, activityId));
+    await tx
+      .update(activities)
+      .set({ defaultRankId: null, updatedAt: new Date() })
+      .where(eq(activities.id, activityId));
+    await tx.delete(activities).where(eq(activities.id, activityId));
+  });
 }
 
 export async function transferOwnership(

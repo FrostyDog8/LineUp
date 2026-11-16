@@ -60,7 +60,7 @@ export function CreateActivityFields() {
         </div>
 
         <div className="space-y-1">
-          <Label htmlFor="defaultCapacity">Default capacity</Label>
+          <Label htmlFor="defaultCapacity">Default spots</Label>
           <Input
             id="defaultCapacity"
             name="defaultCapacity"

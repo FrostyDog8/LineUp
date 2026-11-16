@@ -1,9 +1,17 @@
 import { relations } from "drizzle-orm";
 import { activities, registrationPolicies } from "./activities";
 import { memberships } from "./memberships";
-import { occurrences } from "./occurrences";
+import {
+  occurrenceRankMergeOverrides,
+  occurrenceRankMerges,
+  occurrences,
+} from "./occurrences";
 import { managerPermissions } from "./permissions";
 import { ranks } from "./ranks";
+import {
+  registrationAudits,
+  registrationEntries,
+} from "./registration";
 import { sessions, users } from "./users";
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -30,12 +38,43 @@ export const activitiesRelations = relations(activities, ({ one, many }) => ({
   policy: one(registrationPolicies),
 }));
 
-export const occurrencesRelations = relations(occurrences, ({ one }) => ({
+export const occurrencesRelations = relations(occurrences, ({ one, many }) => ({
   activity: one(activities, {
     fields: [occurrences.activityId],
     references: [activities.id],
   }),
+  registrationEntries: many(registrationEntries),
+  rankMerges: many(occurrenceRankMerges),
+  rankMergeOverrides: many(occurrenceRankMergeOverrides),
 }));
+
+export const occurrenceRankMergesRelations = relations(
+  occurrenceRankMerges,
+  ({ one }) => ({
+    occurrence: one(occurrences, {
+      fields: [occurrenceRankMerges.occurrenceId],
+      references: [occurrences.id],
+    }),
+    rank: one(ranks, {
+      fields: [occurrenceRankMerges.rankId],
+      references: [ranks.id],
+    }),
+  }),
+);
+
+export const occurrenceRankMergeOverridesRelations = relations(
+  occurrenceRankMergeOverrides,
+  ({ one }) => ({
+    occurrence: one(occurrences, {
+      fields: [occurrenceRankMergeOverrides.occurrenceId],
+      references: [occurrences.id],
+    }),
+    rank: one(ranks, {
+      fields: [occurrenceRankMergeOverrides.rankId],
+      references: [ranks.id],
+    }),
+  }),
+);
 
 export const ranksRelations = relations(ranks, ({ one, many }) => ({
   activity: one(activities, {
@@ -44,6 +83,30 @@ export const ranksRelations = relations(ranks, ({ one, many }) => ({
   }),
   memberships: many(memberships),
 }));
+
+export const registrationEntriesRelations = relations(
+  registrationEntries,
+  ({ one }) => ({
+    occurrence: one(occurrences, {
+      fields: [registrationEntries.occurrenceId],
+      references: [occurrences.id],
+    }),
+    user: one(users, {
+      fields: [registrationEntries.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const registrationAuditsRelations = relations(
+  registrationAudits,
+  ({ one }) => ({
+    occurrence: one(occurrences, {
+      fields: [registrationAudits.occurrenceId],
+      references: [occurrences.id],
+    }),
+  }),
+);
 
 export const membershipsRelations = relations(memberships, ({ one }) => ({
   activity: one(activities, {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   createOccurrenceAction,
@@ -103,16 +104,13 @@ export function EventsPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-lg tracking-tight text-foreground">
-          Upcoming events
-        </h2>
-        {canAdd ? (
+      {canAdd ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button type="button" size="sm" onClick={() => setAdding(true)}>
             Add event
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {openError ? (
         <p className="text-sm text-red-700" role="alert">
@@ -137,11 +135,14 @@ export function EventsPanel({
             return (
               <li
                 key={event.id}
-                className="rounded-lg border border-border px-3 py-2.5"
+                className="rounded-lg border border-border px-3 py-2.5 transition-colors hover:border-primary/40"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-medium">
+                  <Link
+                    href={`/activities/${activityId}/events/${event.id}`}
+                    className="min-w-0 flex-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <p className="font-medium text-foreground">
                       {formatEventWhen(startsAt, timezone)}
                       {isPast ? (
                         <span className="ml-2 text-xs font-normal text-muted-foreground">
@@ -155,12 +156,14 @@ export function EventsPanel({
                       </p>
                     ) : null}
                     <p className="text-xs text-muted-foreground">
-                      Capacity {effectiveCapacity}
+                      Spots {effectiveCapacity}
                       {effectivePlace ? ` · ${effectivePlace}` : ""}
                       {" · "}
                       {event.status}
+                      {" · "}
+                      <span className="text-primary">Open line</span>
                     </p>
-                  </div>
+                  </Link>
                   {canEdit && !isPast ? (
                     <div className="flex flex-wrap items-center gap-3">
                       {event.status === "scheduled" ? (
@@ -403,7 +406,7 @@ function EventDialog({
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="dialog-capacity">Capacity override</Label>
+            <Label htmlFor="dialog-capacity">Spots</Label>
             <Input
               id="dialog-capacity"
               name="capacity"

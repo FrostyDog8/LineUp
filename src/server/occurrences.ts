@@ -16,6 +16,7 @@ export type OccurrenceRow = {
   status: "scheduled" | "registration_open" | "closed" | "cancelled";
   subHeadline: string | null;
   notes: string | null;
+  registrationOpensAt: Date | null;
 };
 
 export type CreateOccurrenceInput = {
@@ -33,6 +34,7 @@ export type UpdateOccurrenceInput = {
   subHeadline?: string | null;
   notes?: string | null;
   status?: OccurrenceRow["status"];
+  registrationOpensAt?: Date | null;
 };
 
 async function assertCanEditEvents(
@@ -55,6 +57,7 @@ function mapOccurrence(row: typeof occurrences.$inferSelect): OccurrenceRow {
     status: row.status,
     subHeadline: row.subHeadline,
     notes: row.notes,
+    registrationOpensAt: row.registrationOpensAt ?? null,
   };
 }
 
@@ -163,7 +166,7 @@ export async function createOccurrence(
   assertFutureStart(input.startsAt);
 
   if (input.capacity != null && input.capacity < 1) {
-    throw new Error("Capacity must be at least 1");
+    throw new Error("Spots must be at least 1");
   }
 
   const db = requireDb();
@@ -205,7 +208,7 @@ export async function updateOccurrence(
   }
 
   if (input.capacity != null && input.capacity < 1) {
-    throw new Error("Capacity must be at least 1");
+    throw new Error("Spots must be at least 1");
   }
 
   const patch: Partial<typeof occurrences.$inferInsert> = {
@@ -219,6 +222,9 @@ export async function updateOccurrence(
   }
   if (input.notes !== undefined) patch.notes = input.notes?.trim() || null;
   if (input.status !== undefined) patch.status = input.status;
+  if (input.registrationOpensAt !== undefined) {
+    patch.registrationOpensAt = input.registrationOpensAt;
+  }
 
   const db = requireDb();
   const [row] = await db
@@ -274,6 +280,10 @@ export async function openRegistrationForOccurrence(
     .returning({ id: occurrences.id });
 
   if (!row) throw new Error("Could not open registration");
+
+  // Apply from_open rank merges immediately (lazy scheduled merges too).
+  const { applyDueMerges } = await import("./registration");
+  await applyDueMerges(activityId, occurrenceId);
 }
 
 /** Delete an upcoming event; weekly activities are topped up afterward. */

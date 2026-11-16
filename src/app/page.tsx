@@ -29,7 +29,7 @@ export default async function HomePage() {
         </h1>
         <p className="mt-4 max-w-lg text-base text-muted-foreground sm:text-lg">
           Register for weekly games and club nights with ranks, waitlists, and
-          capacity you can trust — English-first MVP.
+          spots you can trust — English-first MVP.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Button asChild size="lg">

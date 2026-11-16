@@ -33,6 +33,16 @@ export default async function ActivityPage({ params }: Props) {
   await ensureWeeklyOccurrences(id);
   const events = await listOccurrences(id);
 
+  // Lazy scheduled open/merge for upcoming events (no Inngest yet).
+  const { ensureRegistrationState } = await import("@/server/registration");
+  await Promise.all(
+    events
+      .filter((e) => e.startsAt.getTime() > Date.now())
+      .slice(0, 8)
+      .map((e) => ensureRegistrationState(id, e.id)),
+  );
+  const refreshedEvents = await listOccurrences(id);
+
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
     process.env.BETTER_AUTH_URL ??
@@ -73,9 +83,14 @@ export default async function ActivityPage({ params }: Props) {
           </Button>
         ) : null}
         {access.canManageSettings ? (
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/activities/${id}/settings`}>Settings</Link>
-          </Button>
+          <>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/activities/${id}/ranks`}>Ranks</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/activities/${id}/settings`}>Default settings</Link>
+            </Button>
+          </>
         ) : null}
         <Button asChild variant="ghost" size="sm">
           <Link href="/dashboard">Dashboard</Link>
@@ -90,7 +105,7 @@ export default async function ActivityPage({ params }: Props) {
           defaultPlace={activity.defaultPlace}
           scheduleMode={activity.scheduleMode}
           canEdit={access.canEditEvents}
-          events={events.map((e) => ({
+          events={refreshedEvents.map((e) => ({
             id: e.id,
             startsAt: e.startsAt.toISOString(),
             capacity: e.capacity,

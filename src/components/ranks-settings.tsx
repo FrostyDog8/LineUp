@@ -130,12 +130,14 @@ function RankRowEditor({
       ? `${String(fromAt.hour).padStart(2, "0")}:${String(fromAt.minute).padStart(2, "0")}`
       : "12:00");
 
-  const [mode, setMode] = useState<"manual" | "scheduled">(rank.mergeMode);
+  const [mode, setMode] = useState<"from_open" | "manual" | "scheduled">(
+    rank.mergeMode,
+  );
   const [error, setError] = useState<string | null>(null);
   const modeInitRef = useRef(true);
 
   const save = useCallback(
-    async (overrideMode?: "manual" | "scheduled") => {
+    async (overrideMode?: "from_open" | "manual" | "scheduled") => {
       const form = formRef.current;
       if (!form) return;
       setError(null);
@@ -175,7 +177,7 @@ function RankRowEditor({
     return () => clearTimeout(t);
   }, [mode, save]);
 
-  function setMergeMode(next: "manual" | "scheduled") {
+  function setMergeMode(next: "from_open" | "manual" | "scheduled") {
     if (next === mode) return;
     setMode(next);
   }
@@ -219,15 +221,19 @@ function RankRowEditor({
           )}
         </div>
 
+        <p className="text-[10px] text-muted-foreground">
+          When this rank joins the main list
+        </p>
         <input type="hidden" name="mergeMode" value={mode} />
-        <div className="grid grid-cols-2 gap-1 rounded-md border border-border bg-muted/50 p-0.5">
+        <div className="grid grid-cols-3 gap-1 rounded-md border border-border bg-muted/50 p-0.5">
           {(
             [
+              { value: "from_open" as const, label: "From open" },
               {
                 value: "scheduled" as const,
                 label: weekly ? "Day & time" : "Date & time",
               },
-              { value: "manual" as const, label: "Manual" },
+              { value: "manual" as const, label: "Manual merge" },
             ] as const
           ).map((opt) => {
             const selected = mode === opt.value;
@@ -239,8 +245,8 @@ function RankRowEditor({
                 onClick={() => setMergeMode(opt.value)}
                 className={
                   selected
-                    ? "rounded px-2 py-1 text-xs font-medium whitespace-nowrap text-foreground bg-card shadow-sm"
-                    : "rounded px-2 py-1 text-xs font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
+                    ? "rounded px-1.5 py-1 text-[11px] font-medium whitespace-nowrap text-foreground bg-card shadow-sm"
+                    : "rounded px-1.5 py-1 text-[11px] font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
                 }
               >
                 {opt.label}
