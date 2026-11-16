@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { DeleteActivityDialog } from "@/components/delete-activity-dialog";
 import { GeneralSettingsForm } from "@/components/general-settings-form";
-import { RanksSettings } from "@/components/ranks-settings";
 import { TransferOwnershipDialog } from "@/components/transfer-ownership-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,14 +41,9 @@ export default async function ActivitySettingsPage({ params }: Props) {
     (m) => m.status === "active" && m.userId !== user.id,
   );
 
-  const defaultMergeWeekday =
-    activity.scheduleDefaults.registrationOpensWeekday ??
-    activity.weeklyWeekday ??
-    1;
-
   return (
     <DashboardShell
-      title="Settings"
+      title="Default settings"
       subtitle={activity.name}
       userLabel={user.displayName || user.phone}
       askForName={!user.displayName?.trim()}
@@ -61,6 +56,9 @@ export default async function ActivitySettingsPage({ params }: Props) {
         <Button asChild variant="outline" size="sm">
           <Link href={`/activities/${id}/members`}>Members</Link>
         </Button>
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/activities/${id}/ranks`}>Ranks</Link>
+        </Button>
         <TransferOwnershipDialog
           activityId={id}
           candidates={transferCandidates}
@@ -68,50 +66,31 @@ export default async function ActivitySettingsPage({ params }: Props) {
           defaultRankId={activity.defaultRankId}
           compact
         />
+        <DeleteActivityDialog activityId={id} activityName={activity.name} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-5 lg:items-start">
-        <Card className="lg:col-span-3">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">General</CardTitle>
-            <CardDescription>
-              Name, schedule defaults, join mode, and capacity.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <GeneralSettingsForm
-              activityId={id}
-              name={activity.name}
-              defaultCapacity={activity.defaultCapacity}
-              defaultPlace={activity.defaultPlace}
-              scheduleMode={activity.scheduleMode}
-              weeklyWeekday={activity.weeklyWeekday}
-              weeklyTime={activity.weeklyTime}
-              joinMode={activity.joinMode}
-              defaultRankId={activity.defaultRankId}
-              ranks={ranks.map((r) => ({ id: r.id, name: r.name }))}
-            />
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Ranks</CardTitle>
-            <CardDescription>
-              When each rank merges into the main list.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RanksSettings
-              activityId={id}
-              timezone={activity.timezone}
-              scheduleMode={activity.scheduleMode}
-              defaultMergeWeekday={defaultMergeWeekday}
-              ranks={ranks}
-            />
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg">General</CardTitle>
+          <CardDescription>
+            Name, schedule defaults, join mode, and capacity.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <GeneralSettingsForm
+            activityId={id}
+            name={activity.name}
+            defaultCapacity={activity.defaultCapacity}
+            defaultPlace={activity.defaultPlace}
+            scheduleMode={activity.scheduleMode}
+            weeklyWeekday={activity.weeklyWeekday}
+            weeklyTime={activity.weeklyTime}
+            joinMode={activity.joinMode}
+            defaultRankId={activity.defaultRankId}
+            ranks={ranks.map((r) => ({ id: r.id, name: r.name }))}
+          />
+        </CardContent>
+      </Card>
     </DashboardShell>
   );
 }

@@ -55,9 +55,14 @@ export default async function ActivityMembersPage({ params }: Props) {
           <Link href={`/activities/${id}`}>Back to activity</Link>
         </Button>
         {access.canManageSettings ? (
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/activities/${id}/settings`}>Settings</Link>
-          </Button>
+          <>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/activities/${id}/ranks`}>Ranks</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/activities/${id}/settings`}>Default settings</Link>
+            </Button>
+          </>
         ) : null}
       </div>
 

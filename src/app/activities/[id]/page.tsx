@@ -83,9 +83,14 @@ export default async function ActivityPage({ params }: Props) {
           </Button>
         ) : null}
         {access.canManageSettings ? (
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/activities/${id}/settings`}>Settings</Link>
-          </Button>
+          <>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/activities/${id}/ranks`}>Ranks</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/activities/${id}/settings`}>Default settings</Link>
+            </Button>
+          </>
         ) : null}
         <Button asChild variant="ghost" size="sm">
           <Link href="/dashboard">Dashboard</Link>

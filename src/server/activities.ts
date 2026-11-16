@@ -429,6 +429,33 @@ export async function updateActivitySettings(
   return updated;
 }
 
+export async function deleteActivity(
+  activityId: string,
+  actorUserId: string,
+): Promise<void> {
+  const access = await getActivityAccess(activityId, actorUserId);
+  if (!access?.canManageSettings) {
+    throw new Error("Only the owner can delete this activity");
+  }
+
+  const db = requireDb();
+  const existing = await getActivityById(activityId);
+  if (!existing) throw new Error("Activity not found");
+
+  await db.transaction(async (tx) => {
+    // Clear rank FKs so cascade-deleting ranks is not blocked by memberships.
+    await tx
+      .update(memberships)
+      .set({ rankId: null, updatedAt: new Date() })
+      .where(eq(memberships.activityId, activityId));
+    await tx
+      .update(activities)
+      .set({ defaultRankId: null, updatedAt: new Date() })
+      .where(eq(activities.id, activityId));
+    await tx.delete(activities).where(eq(activities.id, activityId));
+  });
+}
+
 export async function transferOwnership(
   activityId: string,
   actorUserId: string,
