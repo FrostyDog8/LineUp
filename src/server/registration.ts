@@ -3,6 +3,7 @@ import { previousWeeklyInstant } from "@/lib/datetime";
 import { requireDb } from "@/lib/db";
 import {
   memberships,
+  occurrenceRankMergeOverrides,
   occurrenceRankMerges,
   occurrences,
   ranks,
@@ -14,7 +15,11 @@ import {
 import { getActivityById } from "./activities";
 import { getOccurrence } from "./occurrences";
 import { getActivityAccess } from "./permissions";
-import { listRanks, type RankMergeMode, type RankRow } from "./ranks";
+import {
+  listRanks,
+  type RankMergeMode,
+  type RankRow,
+} from "./ranks";
 import {
   applyRankMerge,
   compareRankThenTime,
@@ -43,6 +48,22 @@ export type RegistrationListEntry = {
   isYou: boolean;
 };
 
+export type OccurrenceRankMergeSetting = {
+  rankId: string;
+  rankName: string;
+  /** Effective mode after occurrence override (if any). */
+  mergeMode: RankMergeMode;
+  /** Effective absolute merge instant (scheduled), or null. */
+  mergeAt: Date | null;
+  /** Activity-level defaults (for UI “default” labels). */
+  activityMergeMode: RankMergeMode;
+  activityMergeAt: Date | null;
+  /** True when this occurrence has an explicit override row. */
+  overridden: boolean;
+  merged: boolean;
+  due: boolean;
+};
+
 export type OccurrenceRegistrationView = {
   occurrenceId: string;
   activityId: string;
@@ -51,6 +72,8 @@ export type OccurrenceRegistrationView = {
   effectiveCapacity: number;
   capacityOverride: number | null;
   place: string | null;
+  placeOverride: string | null;
+  defaultPlace: string | null;
   subHeadline: string | null;
   main: RegistrationListEntry[];
   wait: RegistrationListEntry[];
@@ -58,7 +81,7 @@ export type OccurrenceRegistrationView = {
   yourExplanation: string | null;
   canRegister: boolean;
   canCancel: boolean;
-  canEditCapacity: boolean;
+  canEditSettings: boolean;
   canMergeRanks: boolean;
   canOpenRegistration: boolean;
   pendingMerges: Array<{
@@ -68,7 +91,10 @@ export type OccurrenceRegistrationView = {
     mergeAt: Date | null;
     due: boolean;
   }>;
+  rankMergeSettings: OccurrenceRankMergeSetting[];
   registrationOpensAt: Date | null;
+  registrationOpensOverride: Date | null;
+  defaultRegistrationOpensAt: Date | null;
 };
 
 function toEngineEntry(row: {
@@ -95,7 +121,19 @@ function toEngineEntry(row: {
   };
 }
 
-export function resolveRankMergeAt(
+export type EffectiveRankMerge = {
+  mergeMode: RankMergeMode;
+  mergeAt: Date | null;
+};
+
+function normalizeMergeMode(raw: string | null | undefined): RankMergeMode {
+  if (raw === "scheduled") return "scheduled";
+  if (raw === "manual") return "manual";
+  return "from_open";
+}
+
+/** Activity-default merge instant for a rank on one occurrence. */
+export function resolveActivityRankMergeAt(
   rank: RankRow,
   occurrenceStartsAt: Date,
   timezone: string,
@@ -113,7 +151,41 @@ export function resolveRankMergeAt(
   return null;
 }
 
-export function resolveRegistrationOpensAt(
+/** @deprecated Prefer resolveActivityRankMergeAt / resolveEffectiveRankMerge. */
+export function resolveRankMergeAt(
+  rank: RankRow,
+  occurrenceStartsAt: Date,
+  timezone: string,
+): Date | null {
+  return resolveActivityRankMergeAt(rank, occurrenceStartsAt, timezone);
+}
+
+export function resolveEffectiveRankMerge(
+  rank: RankRow,
+  occurrenceStartsAt: Date,
+  timezone: string,
+  override:
+    | { mergeMode: string; mergeAt: Date | null }
+    | null
+    | undefined,
+): EffectiveRankMerge {
+  if (override) {
+    const mergeMode = normalizeMergeMode(override.mergeMode);
+    return {
+      mergeMode,
+      mergeAt:
+        mergeMode === "scheduled" && override.mergeAt
+          ? override.mergeAt
+          : null,
+    };
+  }
+  return {
+    mergeMode: rank.mergeMode,
+    mergeAt: resolveActivityRankMergeAt(rank, occurrenceStartsAt, timezone),
+  };
+}
+
+export function resolveActivityRegistrationOpensAt(
   defaults: ScheduleDefaultsJson,
   occurrenceStartsAt: Date,
   timezone: string,
@@ -139,6 +211,42 @@ export function resolveRegistrationOpensAt(
     return Number.isNaN(d.getTime()) ? null : d;
   }
   return null;
+}
+
+export function resolveRegistrationOpensAt(
+  defaults: ScheduleDefaultsJson,
+  occurrenceStartsAt: Date,
+  timezone: string,
+  scheduleMode: "one_time" | "weekly" | "custom",
+  occurrenceOverride?: Date | null,
+): Date | null {
+  if (occurrenceOverride) return occurrenceOverride;
+  return resolveActivityRegistrationOpensAt(
+    defaults,
+    occurrenceStartsAt,
+    timezone,
+    scheduleMode,
+  );
+}
+
+async function loadRankMergeOverrides(
+  occurrenceId: string,
+): Promise<Map<string, { mergeMode: string; mergeAt: Date | null }>> {
+  const db = requireDb();
+  const rows = await db
+    .select({
+      rankId: occurrenceRankMergeOverrides.rankId,
+      mergeMode: occurrenceRankMergeOverrides.mergeMode,
+      mergeAt: occurrenceRankMergeOverrides.mergeAt,
+    })
+    .from(occurrenceRankMergeOverrides)
+    .where(eq(occurrenceRankMergeOverrides.occurrenceId, occurrenceId));
+  return new Map(
+    rows.map((r) => [
+      r.rankId,
+      { mergeMode: r.mergeMode, mergeAt: r.mergeAt ?? null },
+    ]),
+  );
 }
 
 async function writeAudit(
@@ -274,13 +382,21 @@ export async function applyDueMerges(
   if (occurrence.status !== "registration_open") return 0;
 
   const allRanks = await listRanks(activityId);
+  const overrides = await loadRankMergeOverrides(occurrenceId);
   const merged = await loadMergedRankIds(occurrenceId);
   let applied = 0;
 
   for (const rank of allRanks) {
     if (merged.has(rank.id)) continue;
 
-    if (rank.mergeMode === "from_open") {
+    const effective = resolveEffectiveRankMerge(
+      rank,
+      occurrence.startsAt,
+      activity.timezone,
+      overrides.get(rank.id),
+    );
+
+    if (effective.mergeMode === "from_open") {
       const created = await recordRankMerge(
         occurrenceId,
         rank.id,
@@ -302,12 +418,8 @@ export async function applyDueMerges(
       continue;
     }
 
-    if (rank.mergeMode === "scheduled") {
-      const mergeAt = resolveRankMergeAt(
-        rank,
-        occurrence.startsAt,
-        activity.timezone,
-      );
+    if (effective.mergeMode === "scheduled") {
+      const mergeAt = effective.mergeAt;
       if (!mergeAt || mergeAt.getTime() > now.getTime()) continue;
       const created = await recordRankMerge(
         occurrenceId,
@@ -353,6 +465,7 @@ export async function ensureRegistrationState(
       occurrence.startsAt,
       activity.timezone,
       activity.scheduleMode,
+      occurrence.registrationOpensAt,
     );
     if (opensAt && opensAt.getTime() <= now.getTime()) {
       const db = requireDb();
@@ -801,37 +914,66 @@ export async function getOccurrenceRegistrationView(
         ? "Registration is not open yet."
         : null;
 
-  const pendingMerges = rankList
-    .filter((r) => !merged.has(r.id))
-    .map((r) => {
-      const mergeAt = resolveRankMergeAt(
-        r,
-        occurrence.startsAt,
-        activity.timezone,
-      );
-      const due =
-        r.mergeMode === "scheduled" &&
-        mergeAt != null &&
-        mergeAt.getTime() <= Date.now();
-      return {
-        rankId: r.id,
-        rankName: r.name,
-        mergeMode: r.mergeMode,
-        mergeAt,
-        due,
-      };
-    });
+  const overrides = await loadRankMergeOverrides(occurrenceId);
 
-  const registrationOpensAt = resolveRegistrationOpensAt(
+  const rankMergeSettings: OccurrenceRankMergeSetting[] = rankList.map((r) => {
+    const activityMergeAt = resolveActivityRankMergeAt(
+      r,
+      occurrence.startsAt,
+      activity.timezone,
+    );
+    const override = overrides.get(r.id);
+    const effective = resolveEffectiveRankMerge(
+      r,
+      occurrence.startsAt,
+      activity.timezone,
+      override,
+    );
+    const due =
+      effective.mergeMode === "scheduled" &&
+      effective.mergeAt != null &&
+      effective.mergeAt.getTime() <= Date.now();
+    return {
+      rankId: r.id,
+      rankName: r.name,
+      mergeMode: effective.mergeMode,
+      mergeAt: effective.mergeAt,
+      activityMergeMode: r.mergeMode,
+      activityMergeAt,
+      overridden: Boolean(override),
+      merged: merged.has(r.id),
+      due,
+    };
+  });
+
+  const pendingMerges = rankMergeSettings
+    .filter((r) => !r.merged)
+    .map((r) => ({
+      rankId: r.rankId,
+      rankName: r.rankName,
+      mergeMode: r.mergeMode,
+      mergeAt: r.mergeAt,
+      due: r.due,
+    }));
+
+  const defaultRegistrationOpensAt = resolveActivityRegistrationOpensAt(
     activity.scheduleDefaults,
     occurrence.startsAt,
     activity.timezone,
     activity.scheduleMode,
   );
+  const registrationOpensAt = resolveRegistrationOpensAt(
+    activity.scheduleDefaults,
+    occurrence.startsAt,
+    activity.timezone,
+    activity.scheduleMode,
+    occurrence.registrationOpensAt,
+  );
 
   const effectiveCapacity = occurrence.capacity ?? activity.defaultCapacity;
   const canAct =
     access.status === "active" && occurrence.status === "registration_open";
+  const canEditSettings = Boolean(access.canEditEvents);
 
   return {
     occurrenceId,
@@ -841,6 +983,8 @@ export async function getOccurrenceRegistrationView(
     effectiveCapacity,
     capacityOverride: occurrence.capacity,
     place: occurrence.place ?? activity.defaultPlace,
+    placeOverride: occurrence.place,
+    defaultPlace: activity.defaultPlace,
     subHeadline: occurrence.subHeadline,
     main,
     wait,
@@ -848,11 +992,184 @@ export async function getOccurrenceRegistrationView(
     yourExplanation,
     canRegister: canAct && !yourEntry,
     canCancel: canAct && Boolean(yourEntry),
-    canEditCapacity: Boolean(access.canEditEvents),
-    canMergeRanks: Boolean(access.canEditEvents),
+    canEditSettings,
+    canMergeRanks: canEditSettings,
     canOpenRegistration:
-      Boolean(access.canEditEvents) && occurrence.status === "scheduled",
+      canEditSettings && occurrence.status === "scheduled",
     pendingMerges,
+    rankMergeSettings,
     registrationOpensAt,
+    registrationOpensOverride: occurrence.registrationOpensAt,
+    defaultRegistrationOpensAt,
   };
+}
+
+export async function setOccurrenceEventSettings(
+  activityId: string,
+  actorUserId: string,
+  occurrenceId: string,
+  input: {
+    capacity?: number | null;
+    place?: string | null;
+    registrationOpensAt?: Date | null;
+  },
+): Promise<void> {
+  const access = await getActivityAccess(activityId, actorUserId);
+  if (!access?.canEditEvents) {
+    throw new Error("You cannot edit settings for this event");
+  }
+
+  const activity = await getActivityById(activityId);
+  const occurrence = await getOccurrence(activityId, occurrenceId);
+  if (!activity || !occurrence) throw new Error("Event not found");
+
+  if (input.capacity != null && input.capacity < 1) {
+    throw new Error("Capacity must be at least 1");
+  }
+
+  const capacityChanging = input.capacity !== undefined;
+  const nextCapacity =
+    input.capacity !== undefined ? input.capacity : occurrence.capacity;
+
+  const db = requireDb();
+  const patch: Partial<typeof occurrences.$inferInsert> = {
+    updatedAt: new Date(),
+  };
+  if (input.capacity !== undefined) patch.capacity = input.capacity;
+  if (input.place !== undefined) patch.place = input.place?.trim() || null;
+  if (input.registrationOpensAt !== undefined) {
+    patch.registrationOpensAt = input.registrationOpensAt;
+  }
+
+  await db
+    .update(occurrences)
+    .set(patch)
+    .where(
+      and(
+        eq(occurrences.id, occurrenceId),
+        eq(occurrences.activityId, activityId),
+      ),
+    );
+
+  if (capacityChanging) {
+    const effective = nextCapacity ?? activity.defaultCapacity;
+    const entries = await loadActiveEngineEntries(activityId, occurrenceId);
+    let current = rebalanceMainCapacity(entries, effective, "rank_then_time");
+    const mergedIds = await loadMergedRankIds(occurrenceId);
+
+    for (;;) {
+      const before = countMainOccupancy(current);
+      if (before >= effective) break;
+      const result = promoteNextWaiter(current, effective, mergedIds);
+      if (!result.promotedId) break;
+      current = result.entries;
+      await writeAudit(
+        occurrenceId,
+        actorUserId,
+        "auto_promote",
+        { entryId: result.promotedId, reason: "capacity_increase" },
+        result.promotedId,
+      );
+    }
+    await persistEngineEntries(occurrenceId, current);
+    await writeAudit(occurrenceId, actorUserId, "capacity_change", {
+      capacity: effective,
+      override: nextCapacity,
+    });
+  }
+
+  if (input.place !== undefined || input.registrationOpensAt !== undefined) {
+    await writeAudit(occurrenceId, actorUserId, "event_settings_change", {
+      place: input.place !== undefined ? input.place?.trim() || null : undefined,
+      registrationOpensAt:
+        input.registrationOpensAt !== undefined
+          ? input.registrationOpensAt?.toISOString() ?? null
+          : undefined,
+    });
+  }
+
+  // Lazy open may now be due if open-at override moved earlier.
+  await ensureRegistrationState(activityId, occurrenceId);
+}
+
+export async function setOccurrenceRankMergeOverride(
+  activityId: string,
+  actorUserId: string,
+  occurrenceId: string,
+  rankId: string,
+  input:
+    | { useDefault: true }
+    | {
+        useDefault: false;
+        mergeMode: RankMergeMode;
+        mergeAt?: Date | null;
+      },
+): Promise<void> {
+  const access = await getActivityAccess(activityId, actorUserId);
+  if (!access?.canEditEvents) {
+    throw new Error("You cannot adjust merge timing for this event");
+  }
+
+  const occurrence = await getOccurrence(activityId, occurrenceId);
+  if (!occurrence) throw new Error("Event not found");
+
+  const rankList = await listRanks(activityId);
+  const rank = rankList.find((r) => r.id === rankId);
+  if (!rank) throw new Error("Rank not found");
+
+  const db = requireDb();
+
+  if (input.useDefault) {
+    await db
+      .delete(occurrenceRankMergeOverrides)
+      .where(
+        and(
+          eq(occurrenceRankMergeOverrides.occurrenceId, occurrenceId),
+          eq(occurrenceRankMergeOverrides.rankId, rankId),
+        ),
+      );
+    await writeAudit(occurrenceId, actorUserId, "rank_merge_override_clear", {
+      rankId,
+    });
+    await applyDueMerges(activityId, occurrenceId);
+    return;
+  }
+
+  const mergeMode = normalizeMergeMode(input.mergeMode);
+  if (mergeMode === "scheduled" && !input.mergeAt) {
+    throw new Error("Merge date & time is required");
+  }
+
+  const existing = await db.query.occurrenceRankMergeOverrides.findFirst({
+    where: and(
+      eq(occurrenceRankMergeOverrides.occurrenceId, occurrenceId),
+      eq(occurrenceRankMergeOverrides.rankId, rankId),
+    ),
+  });
+
+  const values = {
+    mergeMode,
+    mergeAt: mergeMode === "scheduled" ? (input.mergeAt ?? null) : null,
+    updatedAt: new Date(),
+  };
+
+  if (existing) {
+    await db
+      .update(occurrenceRankMergeOverrides)
+      .set(values)
+      .where(eq(occurrenceRankMergeOverrides.id, existing.id));
+  } else {
+    await db.insert(occurrenceRankMergeOverrides).values({
+      occurrenceId,
+      rankId,
+      ...values,
+    });
+  }
+
+  await writeAudit(occurrenceId, actorUserId, "rank_merge_override_set", {
+    rankId,
+    mergeMode,
+    mergeAt: values.mergeAt?.toISOString() ?? null,
+  });
+  await applyDueMerges(activityId, occurrenceId);
 }

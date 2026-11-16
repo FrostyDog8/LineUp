@@ -16,6 +16,7 @@ export type OccurrenceRow = {
   status: "scheduled" | "registration_open" | "closed" | "cancelled";
   subHeadline: string | null;
   notes: string | null;
+  registrationOpensAt: Date | null;
 };
 
 export type CreateOccurrenceInput = {
@@ -33,6 +34,7 @@ export type UpdateOccurrenceInput = {
   subHeadline?: string | null;
   notes?: string | null;
   status?: OccurrenceRow["status"];
+  registrationOpensAt?: Date | null;
 };
 
 async function assertCanEditEvents(
@@ -55,6 +57,7 @@ function mapOccurrence(row: typeof occurrences.$inferSelect): OccurrenceRow {
     status: row.status,
     subHeadline: row.subHeadline,
     notes: row.notes,
+    registrationOpensAt: row.registrationOpensAt ?? null,
   };
 }
 
@@ -219,6 +222,9 @@ export async function updateOccurrence(
   }
   if (input.notes !== undefined) patch.notes = input.notes?.trim() || null;
   if (input.status !== undefined) patch.status = input.status;
+  if (input.registrationOpensAt !== undefined) {
+    patch.registrationOpensAt = input.registrationOpensAt;
+  }
 
   const db = requireDb();
   const [row] = await db

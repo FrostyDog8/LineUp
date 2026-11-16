@@ -1,7 +1,11 @@
 import { relations } from "drizzle-orm";
 import { activities, registrationPolicies } from "./activities";
 import { memberships } from "./memberships";
-import { occurrenceRankMerges, occurrences } from "./occurrences";
+import {
+  occurrenceRankMergeOverrides,
+  occurrenceRankMerges,
+  occurrences,
+} from "./occurrences";
 import { managerPermissions } from "./permissions";
 import { ranks } from "./ranks";
 import {
@@ -41,6 +45,7 @@ export const occurrencesRelations = relations(occurrences, ({ one, many }) => ({
   }),
   registrationEntries: many(registrationEntries),
   rankMerges: many(occurrenceRankMerges),
+  rankMergeOverrides: many(occurrenceRankMergeOverrides),
 }));
 
 export const occurrenceRankMergesRelations = relations(
@@ -52,6 +57,20 @@ export const occurrenceRankMergesRelations = relations(
     }),
     rank: one(ranks, {
       fields: [occurrenceRankMerges.rankId],
+      references: [ranks.id],
+    }),
+  }),
+);
+
+export const occurrenceRankMergeOverridesRelations = relations(
+  occurrenceRankMergeOverrides,
+  ({ one }) => ({
+    occurrence: one(occurrences, {
+      fields: [occurrenceRankMergeOverrides.occurrenceId],
+      references: [occurrences.id],
+    }),
+    rank: one(ranks, {
+      fields: [occurrenceRankMergeOverrides.rankId],
       references: [ranks.id],
     }),
   }),

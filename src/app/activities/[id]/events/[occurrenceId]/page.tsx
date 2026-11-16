@@ -52,6 +52,8 @@ export default async function OccurrencePage({ params }: Props) {
     effectiveCapacity: view.effectiveCapacity,
     capacityOverride: view.capacityOverride,
     place: view.place,
+    placeOverride: view.placeOverride,
+    defaultPlace: view.defaultPlace,
     subHeadline: view.subHeadline,
     main: view.main.map(serializeEntry),
     wait: view.wait.map(serializeEntry),
@@ -59,15 +61,28 @@ export default async function OccurrencePage({ params }: Props) {
     yourExplanation: view.yourExplanation,
     canRegister: view.canRegister,
     canCancel: view.canCancel,
-    canEditCapacity: view.canEditCapacity,
+    canEditSettings: view.canEditSettings,
     canMergeRanks: view.canMergeRanks,
     canOpenRegistration: view.canOpenRegistration,
     pendingMerges: view.pendingMerges.map((m) => ({
       ...m,
       mergeAt: m.mergeAt ? m.mergeAt.toISOString() : null,
     })),
+    rankMergeSettings: view.rankMergeSettings.map((r) => ({
+      ...r,
+      mergeAt: r.mergeAt ? r.mergeAt.toISOString() : null,
+      activityMergeAt: r.activityMergeAt
+        ? r.activityMergeAt.toISOString()
+        : null,
+    })),
     registrationOpensAt: view.registrationOpensAt
       ? view.registrationOpensAt.toISOString()
+      : null,
+    registrationOpensOverride: view.registrationOpensOverride
+      ? view.registrationOpensOverride.toISOString()
+      : null,
+    defaultRegistrationOpensAt: view.defaultRegistrationOpensAt
+      ? view.defaultRegistrationOpensAt.toISOString()
       : null,
   };
 
@@ -79,7 +94,7 @@ export default async function OccurrencePage({ params }: Props) {
       askForName={!user.displayName?.trim()}
       compact
     >
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-3 flex flex-wrap gap-2">
         <Button asChild variant="ghost" size="sm">
           <Link href={`/activities/${id}`}>← Events</Link>
         </Button>

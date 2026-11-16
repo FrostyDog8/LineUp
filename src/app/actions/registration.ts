@@ -2,13 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSessionUser } from "@/lib/auth";
+import { parseDateTimeLocal } from "@/lib/datetime";
+import { getActivityById } from "@/server/activities";
 import {
   cancelRegistration,
   mergeRankNow,
   registerForOccurrence,
   setOccurrenceCapacityLive,
+  setOccurrenceEventSettings,
+  setOccurrenceRankMergeOverride,
 } from "@/server/registration";
 import { openRegistrationForOccurrence } from "@/server/occurrences";
+import type { RankMergeMode } from "@/server/ranks";
 import type { ActionResult } from "@/app/actions/activities";
 
 function revalidateOccurrence(activityId: string, occurrenceId: string) {
@@ -102,6 +107,105 @@ export async function setOccurrenceCapacityAction(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Could not update capacity",
+    };
+  }
+}
+
+export async function setOccurrenceEventSettingsAction(
+  activityId: string,
+  occurrenceId: string,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const user = await requireSessionUser();
+  const activity = await getActivityById(activityId);
+  if (!activity) return { ok: false, error: "Activity not found" };
+
+  const capacityRaw = String(formData.get("capacity") ?? "").trim();
+  const placeRaw = String(formData.get("place") ?? "");
+  const overrideOpen = String(formData.get("overrideRegistrationOpen") ?? "");
+  const opensAtRaw = String(formData.get("registrationOpensAt") ?? "").trim();
+
+  try {
+    const capacity =
+      capacityRaw === ""
+        ? null
+        : Number.isFinite(Number(capacityRaw))
+          ? Number(capacityRaw)
+          : null;
+    if (capacity != null && capacity < 1) {
+      throw new Error("Capacity must be at least 1");
+    }
+
+    let registrationOpensAt: Date | null = null;
+    if (overrideOpen === "1") {
+      if (!opensAtRaw) throw new Error("Registration open time is required");
+      registrationOpensAt = parseDateTimeLocal(opensAtRaw, activity.timezone);
+    }
+
+    await setOccurrenceEventSettings(activityId, user.id, occurrenceId, {
+      capacity,
+      place: placeRaw.trim() || null,
+      registrationOpensAt,
+    });
+    revalidateOccurrence(activityId, occurrenceId);
+    return { ok: true, message: "Event settings saved." };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not save settings",
+    };
+  }
+}
+
+export async function setOccurrenceRankMergeOverrideAction(
+  activityId: string,
+  occurrenceId: string,
+  rankId: string,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const user = await requireSessionUser();
+  const activity = await getActivityById(activityId);
+  if (!activity) return { ok: false, error: "Activity not found" };
+
+  const useDefault = String(formData.get("useDefault") ?? "") === "1";
+  const mergeModeRaw = String(formData.get("mergeMode") ?? "from_open");
+  const mergeAtRaw = String(formData.get("mergeAt") ?? "").trim();
+
+  try {
+    if (useDefault) {
+      await setOccurrenceRankMergeOverride(
+        activityId,
+        user.id,
+        occurrenceId,
+        rankId,
+        { useDefault: true },
+      );
+    } else {
+      const mergeMode = (
+        mergeModeRaw === "scheduled" || mergeModeRaw === "manual"
+          ? mergeModeRaw
+          : "from_open"
+      ) as RankMergeMode;
+      const mergeAt =
+        mergeMode === "scheduled" && mergeAtRaw
+          ? parseDateTimeLocal(mergeAtRaw, activity.timezone)
+          : null;
+      await setOccurrenceRankMergeOverride(
+        activityId,
+        user.id,
+        occurrenceId,
+        rankId,
+        { useDefault: false, mergeMode, mergeAt },
+      );
+    }
+    revalidateOccurrence(activityId, occurrenceId);
+    return { ok: true, message: "Merge timing updated." };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not update merge",
     };
   }
 }

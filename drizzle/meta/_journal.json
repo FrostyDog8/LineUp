@@ -57,6 +57,13 @@
       "when": 1794855000000,
       "tag": "0007_occurrence_rank_merges",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794856000000,
+      "tag": "0008_occurrence_event_overrides",
+      "breakpoints": true
     }
   ]
 }
