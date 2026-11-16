@@ -96,7 +96,7 @@ export async function setOccurrenceCapacityAction(
   try {
     const capacity = raw === "" ? null : Number(raw);
     if (capacity != null && (!Number.isFinite(capacity) || capacity < 1)) {
-      throw new Error("Capacity must be at least 1");
+      throw new Error("Spots must be at least 1");
     }
     await setOccurrenceCapacityLive(
       activityId,
@@ -105,11 +105,11 @@ export async function setOccurrenceCapacityAction(
       capacity,
     );
     revalidateOccurrence(activityId, occurrenceId);
-    return { ok: true, message: "Capacity updated." };
+    return { ok: true, message: "Spots updated." };
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Could not update capacity",
+      error: err instanceof Error ? err.message : "Could not update spots",
     };
   }
 }
@@ -126,6 +126,7 @@ export async function setOccurrenceEventSettingsAction(
 
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const placeRaw = String(formData.get("place") ?? "");
+  const subHeadlineRaw = String(formData.get("subHeadline") ?? "");
   const overrideOpen = String(formData.get("overrideRegistrationOpen") ?? "");
   const opensAtRaw = String(formData.get("registrationOpensAt") ?? "").trim();
 
@@ -137,7 +138,7 @@ export async function setOccurrenceEventSettingsAction(
           ? Number(capacityRaw)
           : null;
     if (capacity != null && capacity < 1) {
-      throw new Error("Capacity must be at least 1");
+      throw new Error("Spots must be at least 1");
     }
 
     let registrationOpensAt: Date | null = null;
@@ -149,6 +150,7 @@ export async function setOccurrenceEventSettingsAction(
     await setOccurrenceEventSettings(activityId, user.id, occurrenceId, {
       capacity,
       place: placeRaw.trim() || null,
+      subHeadline: subHeadlineRaw.trim() || null,
       registrationOpensAt,
     });
     revalidateOccurrence(activityId, occurrenceId);

@@ -163,7 +163,7 @@ export function OccurrenceEventHeader({ view, timezone }: SharedProps) {
         <p className="text-foreground/90">{view.subHeadline}</p>
       ) : null}
       <p className="text-sm text-muted-foreground">
-        Capacity {view.effectiveCapacity}
+        Spots {view.effectiveCapacity}
         {view.place ? ` · ${view.place}` : ""}
         {view.main.length + view.wait.length > 0
           ? ` · ${view.main.length} main / ${view.wait.length} wait`
@@ -326,7 +326,8 @@ export function OccurrenceSettingsPanel({
     <div className="space-y-3">
       <Feedback error={error} message={message} />
       <p className="text-xs text-muted-foreground">
-        Override place, capacity, and registration open for this event.
+        Override sub-headline, place, spots, and registration open for this
+        event.
       </p>
       <EventSettingsForm
         view={view}
@@ -383,6 +384,17 @@ function EventSettingsForm({
       }}
       className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
     >
+      <div className="space-y-1 sm:col-span-2 lg:col-span-4">
+        <Label htmlFor="event-subHeadline">Sub-headline</Label>
+        <Input
+          id="event-subHeadline"
+          name="subHeadline"
+          className="h-8"
+          placeholder="Optional — e.g. Courts 1–2"
+          maxLength={120}
+          defaultValue={view.subHeadline ?? ""}
+        />
+      </div>
       <div className="space-y-1">
         <Label htmlFor="event-place">Place</Label>
         <Input
@@ -398,7 +410,7 @@ function EventSettingsForm({
         />
       </div>
       <div className="space-y-1">
-        <Label htmlFor="event-capacity">Capacity</Label>
+        <Label htmlFor="event-capacity">Spots</Label>
         <Input
           id="event-capacity"
           name="capacity"

@@ -166,7 +166,7 @@ export async function createOccurrence(
   assertFutureStart(input.startsAt);
 
   if (input.capacity != null && input.capacity < 1) {
-    throw new Error("Capacity must be at least 1");
+    throw new Error("Spots must be at least 1");
   }
 
   const db = requireDb();
@@ -208,7 +208,7 @@ export async function updateOccurrence(
   }
 
   if (input.capacity != null && input.capacity < 1) {
-    throw new Error("Capacity must be at least 1");
+    throw new Error("Spots must be at least 1");
   }
 
   const patch: Partial<typeof occurrences.$inferInsert> = {

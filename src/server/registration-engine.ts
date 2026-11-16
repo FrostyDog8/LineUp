@@ -257,7 +257,7 @@ export function explainStatus(input: {
   rankName: string | null;
 }): string {
   if (input.status === "cancelled") return "You cancelled this registration.";
-  if (input.status === "cut") return "You were cut when capacity was applied.";
+  if (input.status === "cut") return "You were cut when spots were applied.";
   if (input.status === "confirmed") {
     return input.position
       ? `Confirmed attending · #${input.position} on main`

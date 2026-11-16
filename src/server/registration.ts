@@ -724,10 +724,10 @@ export async function setOccurrenceCapacityLive(
 ): Promise<void> {
   const access = await getActivityAccess(activityId, actorUserId);
   if (!access?.canEditEvents) {
-    throw new Error("You cannot change capacity for this activity");
+    throw new Error("You cannot change spots for this activity");
   }
   if (capacity != null && capacity < 1) {
-    throw new Error("Capacity must be at least 1");
+    throw new Error("Spots must be at least 1");
   }
 
   const activity = await getActivityById(activityId);
@@ -1011,6 +1011,7 @@ export async function setOccurrenceEventSettings(
   input: {
     capacity?: number | null;
     place?: string | null;
+    subHeadline?: string | null;
     registrationOpensAt?: Date | null;
   },
 ): Promise<void> {
@@ -1024,7 +1025,7 @@ export async function setOccurrenceEventSettings(
   if (!activity || !occurrence) throw new Error("Event not found");
 
   if (input.capacity != null && input.capacity < 1) {
-    throw new Error("Capacity must be at least 1");
+    throw new Error("Spots must be at least 1");
   }
 
   const capacityChanging = input.capacity !== undefined;
@@ -1037,6 +1038,13 @@ export async function setOccurrenceEventSettings(
   };
   if (input.capacity !== undefined) patch.capacity = input.capacity;
   if (input.place !== undefined) patch.place = input.place?.trim() || null;
+  if (input.subHeadline !== undefined) {
+    const trimmed = input.subHeadline?.trim() || null;
+    if (trimmed && trimmed.length > 120) {
+      throw new Error("Sub-headline must be 120 characters or fewer");
+    }
+    patch.subHeadline = trimmed;
+  }
   if (input.registrationOpensAt !== undefined) {
     patch.registrationOpensAt = input.registrationOpensAt;
   }
@@ -1078,9 +1086,17 @@ export async function setOccurrenceEventSettings(
     });
   }
 
-  if (input.place !== undefined || input.registrationOpensAt !== undefined) {
+  if (
+    input.place !== undefined ||
+    input.subHeadline !== undefined ||
+    input.registrationOpensAt !== undefined
+  ) {
     await writeAudit(occurrenceId, actorUserId, "event_settings_change", {
       place: input.place !== undefined ? input.place?.trim() || null : undefined,
+      subHeadline:
+        input.subHeadline !== undefined
+          ? input.subHeadline?.trim() || null
+          : undefined,
       registrationOpensAt:
         input.registrationOpensAt !== undefined
           ? input.registrationOpensAt?.toISOString() ?? null

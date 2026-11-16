@@ -156,7 +156,7 @@ export function EventsPanel({
                       </p>
                     ) : null}
                     <p className="text-xs text-muted-foreground">
-                      Capacity {effectiveCapacity}
+                      Spots {effectiveCapacity}
                       {effectivePlace ? ` · ${effectivePlace}` : ""}
                       {" · "}
                       {event.status}
@@ -406,7 +406,7 @@ function EventDialog({
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="dialog-capacity">Capacity override</Label>
+            <Label htmlFor="dialog-capacity">Spots</Label>
             <Input
               id="dialog-capacity"
               name="capacity"

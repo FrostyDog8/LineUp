@@ -197,7 +197,7 @@ export async function createActivity(
   const name = input.name.trim();
   if (!name) throw new Error("Activity name is required");
   if (input.defaultCapacity < 1) {
-    throw new Error("Default capacity must be at least 1");
+    throw new Error("Default spots must be at least 1");
   }
 
   if (input.scheduleMode === "one_time" && !input.startsAt) {
@@ -373,7 +373,7 @@ export async function updateActivitySettings(
   if (input.joinMode) patch.joinMode = input.joinMode;
   if (input.defaultCapacity !== undefined) {
     if (input.defaultCapacity < 1) {
-      throw new Error("Default capacity must be at least 1");
+      throw new Error("Default spots must be at least 1");
     }
     patch.defaultCapacity = input.defaultCapacity;
   }
