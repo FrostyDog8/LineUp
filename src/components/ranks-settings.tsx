@@ -233,7 +233,7 @@ function RankRowEditor({
                 value: "scheduled" as const,
                 label: weekly ? "Day & time" : "Date & time",
               },
-              { value: "manual" as const, label: "Merge now" },
+              { value: "manual" as const, label: "Manual merge" },
             ] as const
           ).map((opt) => {
             const selected = mode === opt.value;

@@ -249,7 +249,7 @@ export function OccurrenceLine({ view, timezone, defaultCapacity }: Props) {
                         ? m.mergeAt
                           ? `Scheduled ${formatEventWhen(new Date(m.mergeAt), timezone)}${m.due ? " · due" : ""}`
                           : "Scheduled (time missing)"
-                        : "Manual — Merge now"}
+                        : "Manual merge"}
                   </p>
                 </div>
                 <Button
@@ -267,7 +267,7 @@ export function OccurrenceLine({ view, timezone, defaultCapacity }: Props) {
                     )
                   }
                 >
-                  {busy === `merge-${m.rankId}` ? "Merging…" : "Merge now"}
+                  {busy === `merge-${m.rankId}` ? "Merging…" : "Manual merge"}
                 </Button>
               </li>
             ))}

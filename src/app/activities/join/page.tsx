@@ -5,13 +5,7 @@ import { ActionForm } from "@/components/action-form";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getSessionUser } from "@/lib/auth";
@@ -37,14 +31,7 @@ export default async function JoinActivityPage({ searchParams }: Props) {
       askForName={!user.displayName?.trim()}
     >
       <Card className="max-w-lg">
-        <CardHeader>
-          <CardTitle>Invite</CardTitle>
-          <CardDescription>
-            Open join adds you immediately. Must-approve creates a join request
-            for the owner (or a manager with approve permission).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-4">
           <ActionForm action={joinActivityAction} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="invite">Invite link or code</Label>

@@ -6,8 +6,13 @@ import { Button } from "@/components/ui/button";
 
 type DashboardShellProps = {
   children: React.ReactNode;
-  title?: string;
-  subtitle?: string;
+  /** Page headline. Pass `null` to hide (content owns the only headline). */
+  title?: string | null;
+  /**
+   * One short supporting line under the title.
+   * Omit for the dashboard default; pass `null` for no subtitle.
+   */
+  subtitle?: string | null;
   userLabel?: string | null;
   /** Show first-visit name prompt when display_name is empty. */
   askForName?: boolean;
@@ -17,12 +22,17 @@ type DashboardShellProps = {
 
 export function DashboardShell({
   children,
-  title = "My activities",
-  subtitle = "Create a new activity or join one with an invite link.",
+  title,
+  subtitle,
   userLabel,
   askForName = false,
   compact = false,
 }: DashboardShellProps) {
+  const resolvedTitle = title === undefined ? "My activities" : title;
+  const resolvedSubtitle =
+    subtitle === undefined
+      ? "Create a new activity or join one with an invite link."
+      : subtitle;
   return (
     <div className="min-h-full flex flex-col">
       <header className="border-b border-border/80 bg-background/80 backdrop-blur-sm sticky top-0 z-10">
@@ -73,28 +83,40 @@ export function DashboardShell({
             : "mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6"
         }
       >
-        <div
-          className={
-            compact
-              ? "mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between"
-              : "mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"
-          }
-        >
-          <div>
-            <h1
-              className={
-                compact
-                  ? "font-display text-2xl tracking-tight text-foreground sm:text-3xl"
-                  : "font-display text-3xl tracking-tight text-foreground sm:text-4xl"
-              }
-            >
-              {title}
-            </h1>
-            <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              {subtitle}
-            </p>
+        {resolvedTitle || resolvedSubtitle ? (
+          <div
+            className={
+              compact
+                ? "mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between"
+                : "mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"
+            }
+          >
+            <div>
+              {resolvedTitle ? (
+                <h1
+                  className={
+                    compact
+                      ? "font-display text-2xl tracking-tight text-foreground sm:text-3xl"
+                      : "font-display text-3xl tracking-tight text-foreground sm:text-4xl"
+                  }
+                >
+                  {resolvedTitle}
+                </h1>
+              ) : null}
+              {resolvedSubtitle ? (
+                <p
+                  className={
+                    resolvedTitle
+                      ? "mt-1 max-w-xl text-sm text-muted-foreground"
+                      : "max-w-xl text-sm text-muted-foreground"
+                  }
+                >
+                  {resolvedSubtitle}
+                </p>
+              ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
         {children}
       </main>
       {askForName ? <MeetNameModal /> : null}

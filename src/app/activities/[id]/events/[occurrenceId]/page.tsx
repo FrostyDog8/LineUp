@@ -73,8 +73,8 @@ export default async function OccurrencePage({ params }: Props) {
 
   return (
     <DashboardShell
-      title={activity.name}
-      subtitle="Event line"
+      title={null}
+      subtitle={null}
       userLabel={user.displayName || user.phone}
       askForName={!user.displayName?.trim()}
       compact

@@ -104,16 +104,13 @@ export function EventsPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-lg tracking-tight text-foreground">
-          Upcoming events
-        </h2>
-        {canAdd ? (
+      {canAdd ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button type="button" size="sm" onClick={() => setAdding(true)}>
             Add event
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {openError ? (
         <p className="text-sm text-red-700" role="alert">

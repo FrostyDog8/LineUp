@@ -20,8 +20,8 @@ export const ranks = pgTable("ranks", {
   /**
    * When this rank becomes main-list eligible:
    * - from_open: at registration open
-   * - scheduled: at merge_at / weekday+time (or Merge now)
-   * - manual: only via Merge now
+   * - scheduled: at merge_at / weekday+time (or Manual merge)
+   * - manual: only via Manual merge
    */
   mergeMode: text("merge_mode").notNull().default("from_open"),
   /** Absolute merge instant when mergeMode is scheduled (one-time / custom). */

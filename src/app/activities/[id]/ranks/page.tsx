@@ -3,13 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { RanksSettings } from "@/components/ranks-settings";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { getSessionUser } from "@/lib/auth";
 import { getActivityById } from "@/server/activities";
 import { getActivityAccess } from "@/server/permissions";
@@ -39,7 +33,7 @@ export default async function ActivityRanksPage({ params }: Props) {
   return (
     <DashboardShell
       title="Ranks"
-      subtitle={activity.name}
+      subtitle={null}
       userLabel={user.displayName || user.phone}
       askForName={!user.displayName?.trim()}
       compact
@@ -57,13 +51,7 @@ export default async function ActivityRanksPage({ params }: Props) {
       </div>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg">Rank management</CardTitle>
-          <CardDescription>
-            When each rank merges into the main list.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-4">
           <RanksSettings
             activityId={id}
             timezone={activity.timezone}
