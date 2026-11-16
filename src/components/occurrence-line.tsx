@@ -78,10 +78,9 @@ export type OccurrenceLineView = {
   defaultRegistrationOpensAt: string | null;
 };
 
-type Props = {
+type SharedProps = {
   view: OccurrenceLineView;
   timezone: string;
-  defaultCapacity: number;
 };
 
 function modeLabel(mode: "from_open" | "manual" | "scheduled"): string {
@@ -90,7 +89,7 @@ function modeLabel(mode: "from_open" | "manual" | "scheduled"): string {
   return "Date & time";
 }
 
-export function OccurrenceLine({ view, timezone, defaultCapacity }: Props) {
+function useActionFeedback() {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -116,6 +115,34 @@ export function OccurrenceLine({ view, timezone, defaultCapacity }: Props) {
     }
   }
 
+  return { busy, message, error, run };
+}
+
+function Feedback({
+  error,
+  message,
+}: {
+  error: string | null;
+  message: string | null;
+}) {
+  return (
+    <>
+      {error ? (
+        <p className="text-sm text-red-700" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {message ? (
+        <p className="text-sm text-primary" role="status">
+          {message}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/** Single page headline — event when + status meta. */
+export function OccurrenceEventHeader({ view, timezone }: SharedProps) {
   const startsAt = new Date(view.startsAt);
   const statusLabel =
     view.status === "registration_open"
@@ -127,202 +154,194 @@ export function OccurrenceLine({ view, timezone, defaultCapacity }: Props) {
           : "Cancelled";
 
   return (
-    <div className="space-y-6">
-      <header className="space-y-1">
-        <p className="text-sm text-muted-foreground">{statusLabel}</p>
-        <h1 className="font-display text-2xl tracking-tight text-foreground">
-          {formatEventWhen(startsAt, timezone)}
-        </h1>
-        {view.subHeadline ? (
-          <p className="text-foreground/90">{view.subHeadline}</p>
-        ) : null}
-        <p className="text-sm text-muted-foreground">
-          Capacity {view.effectiveCapacity}
-          {view.place ? ` · ${view.place}` : ""}
-          {view.main.length + view.wait.length > 0
-            ? ` · ${view.main.length} main / ${view.wait.length} wait`
-            : ""}
-        </p>
-        {view.registrationOpensAt && view.status === "scheduled" ? (
-          <p className="text-xs text-muted-foreground">
-            Opens {formatEventWhen(new Date(view.registrationOpensAt), timezone)}
-          </p>
-        ) : null}
-      </header>
-
-      {error ? (
-        <p className="text-sm text-red-700" role="alert">
-          {error}
+    <header className="mb-4 space-y-1">
+      <p className="text-sm text-muted-foreground">{statusLabel}</p>
+      <h1 className="font-display text-2xl tracking-tight text-foreground">
+        {formatEventWhen(startsAt, timezone)}
+      </h1>
+      {view.subHeadline ? (
+        <p className="text-foreground/90">{view.subHeadline}</p>
+      ) : null}
+      <p className="text-sm text-muted-foreground">
+        Capacity {view.effectiveCapacity}
+        {view.place ? ` · ${view.place}` : ""}
+        {view.main.length + view.wait.length > 0
+          ? ` · ${view.main.length} main / ${view.wait.length} wait`
+          : ""}
+      </p>
+      {view.registrationOpensAt && view.status === "scheduled" ? (
+        <p className="text-xs text-muted-foreground">
+          Opens {formatEventWhen(new Date(view.registrationOpensAt), timezone)}
         </p>
       ) : null}
-      {message ? (
-        <p className="text-sm text-primary" role="status">
-          {message}
+    </header>
+  );
+}
+
+export function OccurrenceLinePanel({ view }: { view: OccurrenceLineView }) {
+  const { busy, message, error, run } = useActionFeedback();
+
+  return (
+    <div className="space-y-3">
+      <Feedback error={error} message={message} />
+
+      {view.yourExplanation ? (
+        <p className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-card-foreground">
+          {view.yourExplanation}
         </p>
       ) : null}
 
-      <section className="space-y-3" aria-labelledby="line-heading">
-        <h2
-          id="line-heading"
-          className="font-display text-lg tracking-tight text-foreground"
-        >
-          Line
-        </h2>
-
-        {view.yourExplanation ? (
-          <p className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-card-foreground">
-            {view.yourExplanation}
-          </p>
-        ) : null}
-
-        <div className="flex flex-wrap gap-2">
-          {view.canRegister ? (
-            <Button
-              type="button"
-              size="sm"
-              disabled={busy === "register"}
-              onClick={() =>
-                void run("register", () =>
-                  registerForOccurrenceAction(
-                    view.activityId,
-                    view.occurrenceId,
-                  ),
-                )
-              }
-            >
-              {busy === "register" ? "Registering…" : "Register"}
-            </Button>
-          ) : null}
-          {view.canCancel ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={busy === "cancel"}
-              onClick={() =>
-                void run("cancel", () =>
-                  cancelRegistrationAction(view.activityId, view.occurrenceId),
-                )
-              }
-            >
-              {busy === "cancel" ? "Cancelling…" : "Cancel registration"}
-            </Button>
-          ) : null}
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <LineSection
-            title="Main list"
-            entries={view.main}
-            empty="No one on main yet."
-          />
-          <LineSection
-            title="Wait line"
-            entries={view.wait}
-            empty="Wait line is empty."
-          />
-        </div>
-      </section>
-
-      {view.canMergeRanks ? (
-        <section className="space-y-3" aria-labelledby="merge-heading">
-          <h2
-            id="merge-heading"
-            className="font-display text-lg tracking-tight text-foreground"
-          >
-            Merge
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Manual merge and per-rank timing for this event only. Blank /
-            activity default keeps the rank settings.
-          </p>
-
-          {view.pendingMerges.length > 0 ? (
-            <ul className="space-y-1.5">
-              {view.pendingMerges.map((m) => (
-                <li
-                  key={m.rankId}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium">{m.rankName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {m.mergeMode === "from_open"
-                        ? "From open (pending apply)"
-                        : m.mergeMode === "scheduled"
-                          ? m.mergeAt
-                            ? `Scheduled ${formatEventWhen(new Date(m.mergeAt), timezone)}${m.due ? " · due" : ""}`
-                            : "Scheduled (time missing)"
-                          : "Manual merge"}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={busy === `merge-${m.rankId}`}
-                    onClick={() =>
-                      void run(`merge-${m.rankId}`, () =>
-                        mergeRankNowAction(
-                          view.activityId,
-                          view.occurrenceId,
-                          m.rankId,
-                        ),
-                      )
-                    }
-                  >
-                    {busy === `merge-${m.rankId}` ? "Merging…" : "Manual merge"}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              All ranks are already merged for this event.
-            </p>
-          )}
-
-          <ul className="space-y-2">
-            {view.rankMergeSettings.map((rank) => (
-              <RankMergeOverrideRow
-                key={rank.rankId}
-                view={view}
-                rank={rank}
-                timezone={timezone}
-              />
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {view.canEditSettings ? (
-        <section className="space-y-3" aria-labelledby="settings-heading">
-          <h2
-            id="settings-heading"
-            className="font-display text-lg tracking-tight text-foreground"
-          >
-            Settings
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Override place, capacity, and registration open for this event.
-          </p>
-
-          <EventSettingsForm
-            view={view}
-            timezone={timezone}
-            defaultCapacity={defaultCapacity}
-            busy={busy}
-            onOpen={() =>
-              void run("open", () =>
-                openRegistrationFromEventAction(
+      <div className="flex flex-wrap gap-2">
+        {view.canRegister ? (
+          <Button
+            type="button"
+            size="sm"
+            disabled={busy === "register"}
+            onClick={() =>
+              void run("register", () =>
+                registerForOccurrenceAction(
                   view.activityId,
                   view.occurrenceId,
                 ),
               )
             }
+          >
+            {busy === "register" ? "Registering…" : "Register"}
+          </Button>
+        ) : null}
+        {view.canCancel ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy === "cancel"}
+            onClick={() =>
+              void run("cancel", () =>
+                cancelRegistrationAction(view.activityId, view.occurrenceId),
+              )
+            }
+          >
+            {busy === "cancel" ? "Cancelling…" : "Cancel registration"}
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <LineSection
+          title="Main list"
+          entries={view.main}
+          empty="No one on main yet."
+        />
+        <LineSection
+          title="Wait line"
+          entries={view.wait}
+          empty="Wait line is empty."
+        />
+      </div>
+    </div>
+  );
+}
+
+export function OccurrenceMergePanel({
+  view,
+  timezone,
+}: SharedProps) {
+  const { busy, message, error, run } = useActionFeedback();
+
+  return (
+    <div className="space-y-3">
+      <Feedback error={error} message={message} />
+      <p className="text-xs text-muted-foreground">
+        Manual merge and per-rank timing for this event only. Activity defaults
+        apply unless overridden.
+      </p>
+
+      {view.pendingMerges.length > 0 ? (
+        <ul className="space-y-1.5">
+          {view.pendingMerges.map((m) => (
+            <li
+              key={m.rankId}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+            >
+              <div className="min-w-0">
+                <p className="font-medium">{m.rankName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {m.mergeMode === "from_open"
+                    ? "From open (pending apply)"
+                    : m.mergeMode === "scheduled"
+                      ? m.mergeAt
+                        ? `Scheduled ${formatEventWhen(new Date(m.mergeAt), timezone)}${m.due ? " · due" : ""}`
+                        : "Scheduled (time missing)"
+                      : "Manual merge"}
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy === `merge-${m.rankId}`}
+                onClick={() =>
+                  void run(`merge-${m.rankId}`, () =>
+                    mergeRankNowAction(
+                      view.activityId,
+                      view.occurrenceId,
+                      m.rankId,
+                    ),
+                  )
+                }
+              >
+                {busy === `merge-${m.rankId}` ? "Merging…" : "Manual merge"}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          All ranks are already merged for this event.
+        </p>
+      )}
+
+      <ul className="space-y-2">
+        {view.rankMergeSettings.map((rank) => (
+          <RankMergeOverrideRow
+            key={rank.rankId}
+            view={view}
+            rank={rank}
+            timezone={timezone}
           />
-        </section>
-      ) : null}
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function OccurrenceSettingsPanel({
+  view,
+  timezone,
+  defaultCapacity,
+}: SharedProps & { defaultCapacity: number }) {
+  const { busy, message, error, run } = useActionFeedback();
+
+  return (
+    <div className="space-y-3">
+      <Feedback error={error} message={message} />
+      <p className="text-xs text-muted-foreground">
+        Override place, capacity, and registration open for this event.
+      </p>
+      <EventSettingsForm
+        view={view}
+        timezone={timezone}
+        defaultCapacity={defaultCapacity}
+        busy={busy}
+        onOpen={() =>
+          void run("open", () =>
+            openRegistrationFromEventAction(
+              view.activityId,
+              view.occurrenceId,
+            ),
+          )
+        }
+      />
     </div>
   );
 }
@@ -350,110 +369,105 @@ function EventSettingsForm({
   }, [view.registrationOpensOverride]);
 
   return (
-    <div className="space-y-3">
-      <ActionForm
-        action={async (prev, formData) => {
-          formData.set(
-            "overrideRegistrationOpen",
-            overrideOpen ? "1" : "0",
-          );
-          const result = await setOccurrenceEventSettingsAction(
-            view.activityId,
-            view.occurrenceId,
-            prev,
-            formData,
-          );
-          if (result.ok) router.refresh();
-          return result;
-        }}
-        className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
-      >
-        <div className="space-y-1">
-          <Label htmlFor="event-place">Place</Label>
-          <Input
-            id="event-place"
-            name="place"
-            className="h-8"
-            placeholder={
-              view.defaultPlace
-                ? `Default: ${view.defaultPlace}`
-                : "Activity default if blank"
-            }
-            defaultValue={view.placeOverride ?? ""}
-          />
+    <ActionForm
+      action={async (prev, formData) => {
+        formData.set("overrideRegistrationOpen", overrideOpen ? "1" : "0");
+        const result = await setOccurrenceEventSettingsAction(
+          view.activityId,
+          view.occurrenceId,
+          prev,
+          formData,
+        );
+        if (result.ok) router.refresh();
+        return result;
+      }}
+      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
+    >
+      <div className="space-y-1">
+        <Label htmlFor="event-place">Place</Label>
+        <Input
+          id="event-place"
+          name="place"
+          className="h-8"
+          placeholder={
+            view.defaultPlace
+              ? `Default: ${view.defaultPlace}`
+              : "Activity default if blank"
+          }
+          defaultValue={view.placeOverride ?? ""}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="event-capacity">Capacity</Label>
+        <Input
+          id="event-capacity"
+          name="capacity"
+          type="number"
+          min={1}
+          className="h-8"
+          placeholder={`Default ${defaultCapacity}`}
+          defaultValue={view.capacityOverride?.toString() ?? ""}
+        />
+      </div>
+      <div className="space-y-1 sm:col-span-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Label htmlFor="event-reg-open">Registration open</Label>
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={overrideOpen}
+              onChange={(e) => setOverrideOpen(e.target.checked)}
+              className="size-3.5"
+            />
+            Override default
+          </label>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="event-capacity">Capacity</Label>
+        {overrideOpen ? (
           <Input
-            id="event-capacity"
-            name="capacity"
-            type="number"
-            min={1}
+            id="event-reg-open"
+            name="registrationOpensAt"
+            type="datetime-local"
             className="h-8"
-            placeholder={`Default ${defaultCapacity}`}
-            defaultValue={view.capacityOverride?.toString() ?? ""}
-          />
-        </div>
-        <div className="space-y-1 sm:col-span-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Label htmlFor="event-reg-open">Registration open</Label>
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={overrideOpen}
-                onChange={(e) => setOverrideOpen(e.target.checked)}
-                className="size-3.5"
-              />
-              Override default
-            </label>
-          </div>
-          {overrideOpen ? (
-            <Input
-              id="event-reg-open"
-              name="registrationOpensAt"
-              type="datetime-local"
-              className="h-8"
-              required
-              defaultValue={
-                view.registrationOpensOverride
+            required
+            defaultValue={
+              view.registrationOpensOverride
+                ? formatDateTimeLocal(
+                    new Date(view.registrationOpensOverride),
+                    timezone,
+                  )
+                : view.defaultRegistrationOpensAt
                   ? formatDateTimeLocal(
-                      new Date(view.registrationOpensOverride),
+                      new Date(view.defaultRegistrationOpensAt),
                       timezone,
                     )
-                  : view.defaultRegistrationOpensAt
-                    ? formatDateTimeLocal(
-                        new Date(view.defaultRegistrationOpensAt),
-                        timezone,
-                      )
-                    : ""
-              }
-            />
-          ) : (
-            <p className="h-8 content-center text-xs text-muted-foreground">
-              {view.defaultRegistrationOpensAt
-                ? `Default ${formatEventWhen(new Date(view.defaultRegistrationOpensAt), timezone)}`
-                : "Uses activity default (manual or scheduled)"}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2 lg:col-span-4">
-          <FormSubmitButton size="sm" pendingLabel="Saving…">
-            Save settings
-          </FormSubmitButton>
-          {view.canOpenRegistration ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={busy === "open"}
-              onClick={onOpen}
-            >
-              {busy === "open" ? "Opening…" : "Open registration"}
-            </Button>
-          ) : null}
-        </div>
-      </ActionForm>
-    </div>
+                  : ""
+            }
+          />
+        ) : (
+          <p className="h-8 content-center text-xs text-muted-foreground">
+            {view.defaultRegistrationOpensAt
+              ? `Default ${formatEventWhen(new Date(view.defaultRegistrationOpensAt), timezone)}`
+              : "Uses activity default (manual or scheduled)"}
+          </p>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2 lg:col-span-4">
+        <FormSubmitButton size="sm" pendingLabel="Saving…">
+          Save settings
+        </FormSubmitButton>
+        {view.canOpenRegistration ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy === "open"}
+            onClick={onOpen}
+          >
+            {busy === "open" ? "Opening…" : "Open registration"}
+          </Button>
+        ) : null}
+      </div>
+    </ActionForm>
   );
 }
 
@@ -472,7 +486,6 @@ function RankMergeOverrideRow({
   const [useDefault, setUseDefault] = useState(!rank.overridden);
   const [mode, setMode] = useState(rank.mergeMode);
   const [error, setError] = useState<string | null>(null);
-  const initRef = useRef(true);
 
   useEffect(() => {
     setUseDefault(!rank.overridden);
@@ -517,14 +530,6 @@ function RankMergeOverrideRow({
       void save();
     }, 400);
   }
-
-  useEffect(() => {
-    if (initRef.current) {
-      initRef.current = false;
-      return;
-    }
-    // Mode / default toggles save immediately via handlers below.
-  }, []);
 
   return (
     <li className="rounded-lg border border-border px-2.5 py-2">

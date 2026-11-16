@@ -17,8 +17,11 @@ import type { RankMergeMode } from "@/server/ranks";
 import type { ActionResult } from "@/app/actions/activities";
 
 function revalidateOccurrence(activityId: string, occurrenceId: string) {
+  const base = `/activities/${activityId}/events/${occurrenceId}`;
   revalidatePath(`/activities/${activityId}`);
-  revalidatePath(`/activities/${activityId}/events/${occurrenceId}`);
+  revalidatePath(base);
+  revalidatePath(`${base}/merge`);
+  revalidatePath(`${base}/settings`);
 }
 
 export async function registerForOccurrenceAction(
